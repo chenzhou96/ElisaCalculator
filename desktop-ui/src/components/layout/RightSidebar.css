@@ -5,6 +5,7 @@
   border-left: 1px solid var(--border-sidebar);
   transition: width var(--transition-normal);
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .right-sidebar--open {

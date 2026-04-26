@@ -34,6 +34,7 @@
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-width: 0;
 }
 
 .shell__status {

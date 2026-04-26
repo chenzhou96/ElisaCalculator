@@ -50,7 +50,7 @@ export default function ResultsTable() {
   if (rows.length === 0) {
     return (
       <div className="results-table__empty">
-        尚未运行计算。请在编辑器中粘贴数据，然后在左侧面板中点击"运行计算"。
+        尚未运行计算。请在数据视图中准备数据，然后在左侧面板点击“运行计算”。
       </div>
     )
   }

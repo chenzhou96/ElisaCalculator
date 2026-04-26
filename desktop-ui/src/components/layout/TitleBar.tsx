@@ -23,7 +23,15 @@ export default function TitleBar() {
   return (
     <div className="title-bar" data-tauri-drag-region>
       <div className="title-bar__label" data-tauri-drag-region>
-        <span>ELISA Calculator</span>
+        <span className="title-bar__brand" data-tauri-drag-region>
+          <img
+            src="/Ab.ico"
+            alt="ELISA Calculator Logo"
+            className="title-bar__logo"
+            draggable={false}
+          />
+          <span>ELISA Calculator</span>
+        </span>
         {busy && <span className="title-bar__busy"> — 处理中…</span>}
       </div>
       <div className="title-bar__controls">

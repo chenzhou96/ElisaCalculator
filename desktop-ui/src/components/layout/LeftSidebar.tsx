@@ -1,7 +1,8 @@
 import { useAppState, useDispatch } from '../../context/AppStateContext'
-import { IconChevronLeft } from '../common/Icon'
+import { IconChevronLeft, IconChevronRight } from '../common/Icon'
 import FilePanel from '../data/FilePanel'
 import GroupList from '../results/GroupList'
+import PlotThumbList from '../plots/PlotThumbList'
 import ResizableHandle from '../common/ResizableHandle'
 import './LeftSidebar.css'
 
@@ -9,7 +10,19 @@ export default function LeftSidebar() {
   const { activeView, leftSidebarOpen, sidebarWidth } = useAppState()
   const dispatch = useDispatch()
 
-  if (!leftSidebarOpen) return null
+  if (!leftSidebarOpen) {
+    return (
+      <div className="left-sidebar left-sidebar--closed">
+        <button
+          className="left-sidebar__expand"
+          onClick={() => dispatch({ type: 'TOGGLE_LEFT_SIDEBAR' })}
+          title="展开侧栏"
+        >
+          <IconChevronRight size={16} />
+        </button>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -29,9 +42,7 @@ export default function LeftSidebar() {
         <div className="left-sidebar__body">
           {activeView === 'data' && <FilePanel />}
           {activeView === 'results' && <GroupList />}
-          {activeView === 'plots' && (
-            <div className="left-sidebar__placeholder">暂无图表</div>
-          )}
+          {activeView === 'plots' && <PlotThumbList />}
         </div>
       </div>
       <ResizableHandle />

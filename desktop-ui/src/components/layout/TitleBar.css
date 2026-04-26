@@ -10,9 +10,25 @@
 }
 
 .title-bar__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   white-space: nowrap;
+}
+
+.title-bar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.title-bar__logo {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .title-bar__busy {

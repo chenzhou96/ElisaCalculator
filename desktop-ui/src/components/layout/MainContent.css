@@ -3,6 +3,8 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  flex: 1;
+  min-width: 0;
 }
 
 .main-content__area {
@@ -10,4 +12,31 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+
+.main-content__error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--color-error-bg, #5a1d1d);
+  color: var(--color-error, #f48771);
+  font-size: 12px;
+  border-bottom: 1px solid var(--color-error, #f48771);
+  flex-shrink: 0;
+}
+
+.main-content__error-close {
+  background: none;
+  border: none;
+  color: var(--color-error, #f48771);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.main-content__error-close:hover {
+  opacity: 0.7;
 }

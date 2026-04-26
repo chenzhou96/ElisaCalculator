@@ -16,6 +16,8 @@ export interface AppState {
   rawText: string
   sourceLabel: string
   selectedFileName: string
+  selectedXColumn: string
+  selectedPlotPath: string
   saveOutputs: boolean
 
   busy: boolean
@@ -30,12 +32,7 @@ export interface AppState {
   bottomLog: string[]
 }
 
-export const INITIAL_TEXT = `浓度,样本A,样本B
-0.1,2.05,1.98
-0.3,1.91,1.85
-1,1.55,1.47
-3,0.92,0.88
-10,0.34,0.39`
+export const INITIAL_TEXT = ''
 
 const initialState: AppState = {
   activeView: 'data',
@@ -48,6 +45,8 @@ const initialState: AppState = {
   rawText: INITIAL_TEXT,
   sourceLabel: 'Paste',
   selectedFileName: '',
+  selectedXColumn: '',
+  selectedPlotPath: '',
   saveOutputs: true,
 
   busy: false,
@@ -74,6 +73,8 @@ export type AppAction =
   | { type: 'SET_RAW_TEXT'; text: string }
   | { type: 'SET_SOURCE_LABEL'; label: string }
   | { type: 'SET_SELECTED_FILE_NAME'; name: string }
+  | { type: 'SET_SELECTED_X_COLUMN'; column: string }
+  | { type: 'SET_SELECTED_PLOT_PATH'; path: string }
   | { type: 'SET_SAVE_OUTPUTS'; save: boolean }
   | { type: 'SET_BUSY'; busy: boolean }
   | { type: 'SET_ERROR'; error: string }
@@ -105,16 +106,36 @@ function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, sourceLabel: action.label }
     case 'SET_SELECTED_FILE_NAME':
       return { ...state, selectedFileName: action.name }
+    case 'SET_SELECTED_X_COLUMN':
+      return { ...state, selectedXColumn: action.column }
+    case 'SET_SELECTED_PLOT_PATH':
+      return { ...state, selectedPlotPath: action.path }
     case 'SET_SAVE_OUTPUTS':
       return { ...state, saveOutputs: action.save }
     case 'SET_BUSY':
       return { ...state, busy: action.busy }
     case 'SET_ERROR':
       return { ...state, error: action.error }
-    case 'SET_PARSE_RESULT':
-      return { ...state, parseResult: action.result }
+    case 'SET_PARSE_RESULT': {
+      const columns = action.result?.meta?.columns ?? []
+      const hasSelectedX = state.selectedXColumn && columns.includes(state.selectedXColumn)
+      return {
+        ...state,
+        parseResult: action.result,
+        selectedXColumn: columns.length > 0 ? (hasSelectedX ? state.selectedXColumn : String(columns[0])) : '',
+      }
+    }
     case 'SET_RUN_RESULT':
-      return { ...state, runResult: action.result, selectedGroupIndex: 0 }
+      {
+        const plotFiles = action.result?.saved_files?.filter((f) => f.toLowerCase().endsWith('.png')) ?? []
+        const hasSelectedPlot = state.selectedPlotPath && plotFiles.includes(state.selectedPlotPath)
+        return {
+          ...state,
+          runResult: action.result,
+          selectedGroupIndex: 0,
+          selectedPlotPath: plotFiles.length > 0 ? (hasSelectedPlot ? state.selectedPlotPath : plotFiles[0]) : '',
+        }
+      }
     case 'SET_SELECTED_GROUP_INDEX':
       return { ...state, selectedGroupIndex: action.index }
     case 'SET_IS_MAXIMIZED':
@@ -210,8 +231,10 @@ export function useAppActions() {
         command: 'run',
         raw_text: state.rawText,
         source_label: state.sourceLabel,
+        x_col_name: state.selectedXColumn || undefined,
         save_outputs: state.saveOutputs,
       })
+      console.warn('[handleRun] 完整响应:', JSON.stringify(response))
       dispatch({ type: 'SET_RUN_RESULT', result: response })
 
       if (response.meta) {
@@ -237,7 +260,6 @@ export function useAppActions() {
           appendLog(`[run] 已导出到: ${response.output_dir}`)
         }
         dispatch({ type: 'SET_ACTIVE_VIEW', view: 'results' })
-        dispatch({ type: 'SET_ACTIVE_TAB', tab: 'table' })
       } else {
         dispatch({ type: 'SET_ERROR', error: response.error })
         appendLog(`[run] 计算失败: ${response.error}`)
@@ -249,7 +271,7 @@ export function useAppActions() {
     } finally {
       dispatch({ type: 'SET_BUSY', busy: false })
     }
-  }, [state.rawText, state.sourceLabel, state.saveOutputs, state.parseResult, dispatch, appendLog])
+  }, [state.rawText, state.sourceLabel, state.selectedXColumn, state.saveOutputs, state.parseResult, dispatch, appendLog])
 
   return { handleParse, handleRun, appendLog }
 }

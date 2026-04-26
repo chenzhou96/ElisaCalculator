@@ -11,17 +11,15 @@
 
 .plot-viewer {
   height: 100%;
-  overflow: auto;
+  overflow: hidden;
   padding: 16px;
+  min-width: 0;
 }
 
-.plot-viewer__list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: 16px;
-}
-
-.plot-viewer__card {
+.plot-viewer__single {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   background: var(--bg-sidebar);
   border: 1px solid var(--border-panel);
   border-radius: 6px;
@@ -35,15 +33,40 @@
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-panel);
   background: var(--bg-tab);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.plot-viewer__card-body {
+.plot-viewer__single-body {
+  flex: 1;
+  min-height: 0;
   padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plot-viewer__card-loading,
+.plot-viewer__card-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.plot-viewer__card-error {
+  color: var(--text-danger, #e74c3c);
 }
 
 .plot-viewer__img {
   width: 100%;
-  height: auto;
+  height: 100%;
   display: block;
   border-radius: 4px;
+  object-fit: contain;
+  min-width: 0;
 }

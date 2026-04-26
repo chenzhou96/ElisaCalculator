@@ -1,11 +1,35 @@
+import { useEffect, useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { useAppState } from '../../context/AppStateContext'
 import './PlotViewer.css'
 
+function PlotImage({ path, name }: { path: string; name: string }) {
+  const [src, setSrc] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    invoke<string>('read_file_base64', { path })
+      .then(setSrc)
+      .catch((err: Error) => setError(err.message ?? String(err)))
+  }, [path])
+
+  if (error) {
+    return <div className="plot-viewer__card-error">加载失败: {error}</div>
+  }
+  if (!src) {
+    return <div className="plot-viewer__card-loading">加载中...</div>
+  }
+  return <img src={src} alt={name} className="plot-viewer__img" />
+}
+
 export default function PlotViewer() {
-  const { runResult } = useAppState()
+  const { runResult, selectedPlotPath } = useAppState()
   const plotFiles = runResult?.saved_files?.filter(
-    (f) => f.endsWith('.png'),
+    (f) => f.toLowerCase().endsWith('.png'),
   ) ?? []
+  const activePath = selectedPlotPath && plotFiles.includes(selectedPlotPath)
+    ? selectedPlotPath
+    : plotFiles[0]
 
   if (plotFiles.length === 0) {
     return (
@@ -15,24 +39,19 @@ export default function PlotViewer() {
     )
   }
 
+  if (!activePath) {
+    return <div className="plot-viewer__empty">未选中图表。</div>
+  }
+
+  const activeName = activePath.replace(/^.*[\\/]/, '')
+
   return (
     <div className="plot-viewer">
-      <div className="plot-viewer__list">
-        {plotFiles.map((path) => {
-          const name = path.replace(/^.*[\\/]/, '')
-          return (
-            <div key={path} className="plot-viewer__card">
-              <div className="plot-viewer__card-header">{name}</div>
-              <div className="plot-viewer__card-body">
-                <img
-                  src={`asset://localhost/${encodeURI(path)}`}
-                  alt={name}
-                  className="plot-viewer__img"
-                />
-              </div>
-            </div>
-          )
-        })}
+      <div className="plot-viewer__single">
+        <div className="plot-viewer__card-header">{activeName}</div>
+        <div className="plot-viewer__single-body">
+          <PlotImage path={activePath} name={activeName} />
+        </div>
       </div>
     </div>
   )

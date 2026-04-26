@@ -1,32 +1,30 @@
-import type { TabType } from '../../types/layout'
 import { useAppState, useDispatch } from '../../context/AppStateContext'
-import TabBar from '../common/TabBar'
 import RawDataEditor from '../data/RawDataEditor'
 import ResultsTable from '../results/ResultsTable'
 import PlotViewer from '../plots/PlotViewer'
 import './MainContent.css'
 
-const tabs: { id: TabType; label: string }[] = [
-  { id: 'editor', label: '编辑器' },
-  { id: 'table', label: '结果表' },
-  { id: 'plot', label: '拟合图' },
-]
-
 export default function MainContent() {
-  const { activeTab } = useAppState()
+  const { activeView, error } = useAppState()
   const dispatch = useDispatch()
 
   return (
     <div className="main-content">
-      <TabBar
-        tabs={tabs}
-        activeTab={activeTab}
-        onTabChange={(tab) => dispatch({ type: 'SET_ACTIVE_TAB', tab })}
-      />
+      {error && (
+        <div className="main-content__error">
+          {error}
+          <button
+            className="main-content__error-close"
+            onClick={() => dispatch({ type: 'SET_ERROR', error: '' })}
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div className="main-content__area">
-        {activeTab === 'editor' && <RawDataEditor />}
-        {activeTab === 'table' && <ResultsTable />}
-        {activeTab === 'plot' && <PlotViewer />}
+        {activeView === 'data' && <RawDataEditor />}
+        {activeView === 'results' && <ResultsTable />}
+        {activeView === 'plots' && <PlotViewer />}
       </div>
     </div>
   )

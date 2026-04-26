@@ -11,8 +11,8 @@ export default function StatusBar() {
     <div className="status-bar">
       <div className="status-bar__left">
         <span className={`status-bar__dot ${busy ? 'status-bar__dot--busy' : error ? 'status-bar__dot--error' : 'status-bar__dot--idle'}`} />
-        <span className="status-bar__state">
-          {busy ? '处理中' : error ? '错误' : '就绪'}
+        <span className="status-bar__state" title={error || undefined}>
+          {busy ? '处理中' : error ? `错误: ${error}` : '就绪'}
         </span>
       </div>
       <div className="status-bar__right">
