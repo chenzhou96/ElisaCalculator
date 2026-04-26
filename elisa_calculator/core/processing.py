@@ -1,9 +1,68 @@
+from dataclasses import asdict, dataclass
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
-from scipy.stats import spearmanr
 
+from .evaluator import build_group_warning_notes, compute_fit_metrics
 from .model import four_param_logistic, global_four_param_logistic_model
+
+
+@dataclass
+class FitParameters:
+    A: float
+    B: float
+    C: float
+    D: float
+
+
+@dataclass
+class GroupCalculationDetail:
+    group_name: str
+    x: np.ndarray
+    y: np.ndarray
+    y_pred: Optional[np.ndarray]
+    status: str
+    warning_list: list
+    skip_reason: str = ''
+    params: Optional[FitParameters] = None
+    r2: float = np.nan
+    rmse: float = np.nan
+
+    def to_dict(self):
+        data = asdict(self)
+        return data
+
+
+@dataclass
+class CalculationReport:
+    prepared: dict
+    fit_success: bool
+    fit_error: str
+    global_params: dict
+    summary_rows: list
+    detailed_rows: list
+
+    def to_dict(self):
+        return {
+            'prepared': self.prepared,
+            'fit_success': self.fit_success,
+            'fit_error': self.fit_error,
+            'global_params': self.global_params,
+            'summary_rows': self.summary_rows,
+            'detailed_rows': [row.to_dict() for row in self.detailed_rows],
+        }
+
+
+@dataclass
+class GlobalFitResult:
+    success: bool
+    error: str
+    group_id_map: dict
+    params: Optional[np.ndarray]
+    global_A: float = np.nan
+    global_D: float = np.nan
 
 
 def prepare_group_data(df, x_col_name=None, y_cols_names=None):
@@ -91,40 +150,7 @@ def prepare_group_data(df, x_col_name=None, y_cols_names=None):
     }, 'Success', removed_x_nonpositive_total
 
 
-def build_group_warning_notes(x, y, ec50, r2):
-    notes = []
-    if len(x) < 4:
-        notes.append('few data points')
-
-    y_range = float(np.max(y) - np.min(y)) if len(y) else np.nan
-    if np.isfinite(y_range) and y_range < 0.3:
-        notes.append('small response range')
-
-    try:
-        rho, _ = spearmanr(x, y)
-        if np.isfinite(rho) and abs(rho) < 0.7:
-            notes.append(f'weak monotonicity(r={rho:.2f})')
-    except Exception:
-        pass
-
-    x_min, x_max = np.min(x), np.max(x)
-    if np.isfinite(ec50):
-        if ec50 < x_min or ec50 > x_max:
-            notes.append('EC50 out of concentration range')
-    else:
-        notes.append('EC50 unavailable')
-
-    if np.isfinite(r2) and r2 < 0.90:
-        notes.append(f'low fit quality(R2={r2:.3f})')
-
-    return notes
-
-
-def calculate_ec50_global_df(df, x_col_name=None, y_cols_names=None):
-    prepared, status_msg, removed_count = prepare_group_data(df, x_col_name, y_cols_names)
-    if prepared is None:
-        return [], status_msg, removed_count, None
-
+def fit_prepared_groups(prepared):
     ready_groups = prepared['ready_groups']
     all_x = np.concatenate([g['x'] for g in ready_groups]).astype(float)
     all_y = np.concatenate([g['y'] for g in ready_groups]).astype(float)
@@ -165,15 +191,24 @@ def calculate_ec50_global_df(df, x_col_name=None, y_cols_names=None):
             bounds=(lower_bounds, upper_bounds)
         )
     except Exception as e:
-        return [], f'global fitting failed: {str(e)}', removed_count, {
-            'prepared': prepared,
-            'fit_success': False,
-            'fit_error': str(e),
-        }
+        return GlobalFitResult(
+            success=False,
+            error=str(e),
+            group_id_map=group_id_map,
+            params=None,
+        )
 
-    global_A = float(popt[0])
-    global_D = float(popt[1])
+    return GlobalFitResult(
+        success=True,
+        error='',
+        group_id_map=group_id_map,
+        params=popt,
+        global_A=float(popt[0]),
+        global_D=float(popt[1]),
+    )
 
+
+def build_calculation_report(prepared, fit_result):
     summary_rows = []
     detailed_rows = []
 
@@ -183,8 +218,8 @@ def calculate_ec50_global_df(df, x_col_name=None, y_cols_names=None):
             'N': g.get('n_points', 0),
             'EC50': np.nan,
             'Slope': np.nan,
-            'Global_A': global_A,
-            'Global_D': global_D,
+            'Global_A': fit_result.global_A,
+            'Global_D': fit_result.global_D,
             'R2': np.nan,
             'RMSE': np.nan,
             'X_min': np.nan,
@@ -195,38 +230,37 @@ def calculate_ec50_global_df(df, x_col_name=None, y_cols_names=None):
             'Warning': '; '.join(g.get('pre_notes', [])),
         }
 
-        detail = {
-            'group_name': g['group_name'],
-            'x': g.get('x', np.array([], dtype=float)),
-            'y': g.get('y', np.array([], dtype=float)),
-            'y_pred': None,
-            'status': row['Status'],
-            'warning_list': list(g.get('pre_notes', [])),
-            'skip_reason': g.get('skip_reason', ''),
-        }
+        detail = GroupCalculationDetail(
+            group_name=g['group_name'],
+            x=g.get('x', np.array([], dtype=float)),
+            y=g.get('y', np.array([], dtype=float)),
+            y_pred=None,
+            status=row['Status'],
+            warning_list=list(g.get('pre_notes', [])),
+            skip_reason=g.get('skip_reason', ''),
+        )
 
         if g['status'] != 'Ready':
             if g.get('skip_reason'):
-                detail['warning_list'].append(g['skip_reason'])
-            row['Warning'] = '; '.join(detail['warning_list'])
+                detail.warning_list.append(g['skip_reason'])
+            row['Warning'] = '; '.join(detail.warning_list)
             detailed_rows.append(detail)
             summary_rows.append(row)
             continue
 
-        fit_idx = group_id_map[g['group_index']]
+        fit_idx = fit_result.group_id_map[g['group_index']]
         idx_b = 2 + fit_idx * 2
         idx_c = idx_b + 1
-        b_val = float(popt[idx_b])
-        c_val = float(popt[idx_c])
+        b_val = float(fit_result.params[idx_b])
+        c_val = float(fit_result.params[idx_c])
 
         x = g['x']
         y = g['y']
-        y_pred = four_param_logistic(x, global_A, b_val, c_val, global_D)
+        y_pred = four_param_logistic(x, fit_result.global_A, b_val, c_val, fit_result.global_D)
 
-        ss_res = float(np.sum((y - y_pred) ** 2))
-        ss_tot = float(np.sum((y - np.mean(y)) ** 2))
-        r2 = np.nan if ss_tot == 0 else 1 - ss_res / ss_tot
-        rmse = float(np.sqrt(np.mean((y - y_pred) ** 2)))
+        metrics = compute_fit_metrics(y, y_pred)
+        r2 = metrics['r2']
+        rmse = metrics['rmse']
 
         warn_list = list(g.get('pre_notes', []))
         warn_list.extend(build_group_warning_notes(x, y, c_val, r2))
@@ -245,29 +279,43 @@ def calculate_ec50_global_df(df, x_col_name=None, y_cols_names=None):
             'Warning': '; '.join(warn_list),
         })
 
-        detail.update({
-            'y_pred': y_pred,
-            'status': 'Success',
-            'warning_list': warn_list,
-            'params': {
-                'A': global_A,
-                'B': b_val,
-                'C': c_val,
-                'D': global_D,
-            },
-            'r2': r2,
-            'rmse': rmse,
-        })
+        detail.y_pred = y_pred
+        detail.status = 'Success'
+        detail.warning_list = warn_list
+        detail.params = FitParameters(A=fit_result.global_A, B=b_val, C=c_val, D=fit_result.global_D)
+        detail.r2 = r2
+        detail.rmse = rmse
 
         detailed_rows.append(detail)
         summary_rows.append(row)
 
-    detail_obj = {
-        'prepared': prepared,
-        'fit_success': True,
-        'fit_error': '',
-        'global_params': {'A': global_A, 'D': global_D},
-        'summary_rows': summary_rows,
-        'detailed_rows': detailed_rows,
-    }
-    return summary_rows, 'Success', removed_count, detail_obj
+    return CalculationReport(
+        prepared=prepared,
+        fit_success=True,
+        fit_error='',
+        global_params={'A': fit_result.global_A, 'D': fit_result.global_D},
+        summary_rows=summary_rows,
+        detailed_rows=detailed_rows,
+    )
+
+
+def calculate_ec50_global_df(df, x_col_name=None, y_cols_names=None):
+    prepared, status_msg, removed_count = prepare_group_data(df, x_col_name, y_cols_names)
+    if prepared is None:
+        return [], status_msg, removed_count, None
+
+    fit_result = fit_prepared_groups(prepared)
+    if not fit_result.success:
+        report = CalculationReport(
+            prepared=prepared,
+            fit_success=False,
+            fit_error=fit_result.error,
+            global_params={},
+            summary_rows=[],
+            detailed_rows=[],
+        )
+        return [], f'global fitting failed: {fit_result.error}', removed_count, report
+
+    report = build_calculation_report(prepared, fit_result)
+    summary_rows = report.summary_rows
+    return summary_rows, 'Success', removed_count, report
