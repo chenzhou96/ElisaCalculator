@@ -73,6 +73,52 @@ cd desktop-ui
 npm run build
 ```
 
+## 发布（Windows）
+
+### 1) 发布前检查
+
+```bash
+python -m unittest discover -s tests -v
+cd desktop-ui
+npm run tauri build -- --no-bundle
+```
+
+说明：`--no-bundle` 会先验证可执行文件可正常构建，产物为 `desktop-ui/src-tauri/target/release/app.exe`。
+
+### 2) 生成安装包
+
+```bash
+cd desktop-ui
+npm run tauri build -- --bundles nsis
+```
+
+如果网络受限，Tauri 可能在首次打包时下载 NSIS/WiX 失败（超时）。这是安装包工具链下载失败，不影响 `app.exe` 构建。
+
+### 3) Python 运行依赖
+
+当前桌面版通过 Python 桥接运行计算逻辑，目标机器需要可用的 Python 环境及依赖（如 numpy/pandas/scipy/matplotlib）。
+
+本仓库已将 `elisa_calculator` 包作为 Tauri 资源纳入构建，发布版会在运行时自动查找资源目录。
+
+### 4) 离线打包（无外网）
+
+Tauri 已配置 `bundle.useLocalToolsDir=true`，会优先使用项目内缓存目录：`desktop-ui/src-tauri/target/.tauri`。
+
+首次准备离线工具缓存：
+
+```bash
+cd desktop-ui
+npm run tauri:prepare:offline-tools
+```
+
+离线构建命令：
+
+```bash
+cd desktop-ui
+npm run tauri:build:nsis:offline
+npm run tauri:build:msi:offline
+```
+
 ## 扩展建议
 
 1. 新增算法：在 `core` 增加新的拟合函数，并在 `services/workflow.py` 注入 `calculator`。

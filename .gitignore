@@ -2,25 +2,27 @@
 *_pycache__*
 *pytest_cache*
 *.claude*
+tools
 
-desktop-ui\node_modules\
-desktop-ui\dist\
-desktop-ui\dist-ssr\
-desktop-ui\src-tauri\target\
+desktop-ui/node_modules/
+desktop-ui/dist/
+desktop-ui/dist-ssr/
+desktop-ui/src-tauri/target/
+desktop-ui/src-tauri/resources/
 
-desktop-ui\logs
-desktop-ui\*.log
-desktop-ui\npm-debug.log*
-desktop-ui\yarn-debug.log*
-desktop-ui\yarn-error.log*
-desktop-ui\pnpm-debug.log*
-desktop-ui\lerna-debug.log*
-desktop-ui\*.local
+desktop-ui/logs
+desktop-ui/*.log
+desktop-ui/npm-debug.log*
+desktop-ui/yarn-debug.log*
+desktop-ui/yarn-error.log*
+desktop-ui/pnpm-debug.log*
+desktop-ui/lerna-debug.log*
+desktop-ui/*.local
 
-desktop-ui\.idea\
-desktop-ui\.DS_Store
-desktop-ui\*.suo
-desktop-ui\*.ntvs*
-desktop-ui\*.njsproj
-desktop-ui\*.sln
-desktop-ui\*.sw?
+desktop-ui/.idea/
+desktop-ui/.DS_Store
+desktop-ui/*.suo
+desktop-ui/*.ntvs*
+desktop-ui/*.njsproj
+desktop-ui/*.sln
+desktop-ui/*.sw?
