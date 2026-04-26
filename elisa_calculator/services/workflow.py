@@ -89,11 +89,14 @@ def calculate_workflow_report(
     calculator_kwargs = calculator_kwargs or {}
     results, status_msg, removed_count, report = calculator(df, **calculator_kwargs)
     detail = report.to_dict() if report is not None else None
+    ok = status_msg == 'Success' and report is not None and report.fit_success
     error = ''
-    ok = True
 
-    if report is not None and not report.fit_success:
-        error = report.fit_error
+    if not ok:
+        if report is not None and not report.fit_success and report.fit_error:
+            error = report.fit_error
+        else:
+            error = status_msg
 
     return CalculationStageResult(
         ok=ok,
@@ -178,8 +181,8 @@ def run_calculation_workflow(
     )
 
     return WorkflowResult(
-        ok=True,
-        error='',
+        ok=calculation_result.ok,
+        error=calculation_result.error,
         df=parse_result.df,
         meta=parse_result.meta,
         results=calculation_result.results,

@@ -63,6 +63,7 @@ class ElisaCalculatorApp:
         self.mapping_profiles = {}
         self.ui_state_file = os.path.join(os.path.expanduser('~'), '.elisa_calculator_ui_state.json')
         self.image_viewer = None
+        self.is_busy = False
         self.summary_vars = {
             'source': tk.StringVar(value='未载入'),
             'shape': tk.StringVar(value='-'),
@@ -83,8 +84,8 @@ class ElisaCalculatorApp:
 
     def _build_root(self):
         self.root.title('ELISA Calculator')
-        self.root.geometry('1240x860')
-        self.root.minsize(1080, 720)
+        self.root.geometry('1180x760')
+        self.root.minsize(960, 640)
         self.root.configure(bg=self.colors['bg'])
         try:
             icon_path = resource_path('Ab.ico')
@@ -104,13 +105,13 @@ class ElisaCalculatorApp:
         style.configure('Title.TLabel', background=self.colors['panel'], foreground=self.colors['text'], font=('Segoe UI', 13, 'bold'))
         style.configure('Body.TLabel', background=self.colors['panel'], foreground=self.colors['subtext'], font=('Segoe UI', 10))
         style.configure('Muted.TLabel', background=self.colors['panel'], foreground=self.colors['muted'], font=('Segoe UI', 9))
-        style.configure('Accent.TButton', font=('Segoe UI', 10, 'bold'), padding=(14, 10), foreground='white', background=self.colors['accent'], borderwidth=0)
+        style.configure('Accent.TButton', font=('Segoe UI', 10, 'bold'), padding=(10, 7), foreground='white', background=self.colors['accent'], borderwidth=0)
         style.map('Accent.TButton', background=[('active', self.colors['accent_hover']), ('pressed', self.colors['accent_hover'])])
-        style.configure('Soft.TButton', font=('Segoe UI', 10), padding=(12, 9), foreground=self.colors['text'], background=self.colors['soft'], borderwidth=0)
+        style.configure('Soft.TButton', font=('Segoe UI', 10), padding=(10, 7), foreground=self.colors['text'], background=self.colors['soft'], borderwidth=0)
         style.map('Soft.TButton', background=[('active', '#DCEAFF')])
-        style.configure('Modern.TEntry', padding=8)
+        style.configure('Modern.TEntry', padding=7)
         style.configure('Modern.TNotebook', background=self.colors['bg'], borderwidth=0, tabmargins=(0, 0, 0, 0))
-        style.configure('Modern.TNotebook.Tab', padding=(18, 10), font=('Segoe UI', 10, 'bold'))
+        style.configure('Modern.TNotebook.Tab', padding=(14, 8), font=('Segoe UI', 10, 'bold'))
         style.map('Modern.TNotebook.Tab', background=[('selected', self.colors['panel']), ('active', '#EEF4FF')])
 
     def _make_card(self, parent, padding=16):
@@ -147,11 +148,11 @@ class ElisaCalculatorApp:
         return wrapper, text
 
     def _build_ui(self):
-        main = ttk.Frame(self.root, style='App.TFrame', padding=18)
+        main = ttk.Frame(self.root, style='App.TFrame', padding=10)
         main.pack(fill='both', expand=True)
 
-        hero = tk.Frame(main, bg=self.colors['hero'], padx=24, pady=22)
-        hero.pack(fill='x', pady=(0, 14))
+        hero = tk.Frame(main, bg=self.colors['hero'], padx=16, pady=12)
+        hero.pack(fill='x', pady=(0, 8))
         tk.Label(
             hero,
             text='ELISA 4PL Global Fit Studio',
@@ -173,13 +174,13 @@ class ElisaCalculatorApp:
 
         left = tk.Frame(paned, bg=self.colors['bg'])
         right = tk.Frame(paned, bg=self.colors['bg'])
-        paned.add(left, minsize=620, stretch='always')
-        paned.add(right, minsize=320)
+        paned.add(left, minsize=560, stretch='always')
+        paned.add(right, minsize=300)
 
         notebook_wrap, notebook_inner = self._make_card(left, padding=0)
-        notebook_wrap.pack(fill='x', expand=False, pady=(0, 14))
+        notebook_wrap.pack(fill='x', expand=False, pady=(0, 8))
 
-        notebook = ttk.Notebook(notebook_inner, style='Modern.TNotebook', height=295)
+        notebook = ttk.Notebook(notebook_inner, style='Modern.TNotebook', height=220)
         notebook.pack(fill='x', expand=False)
         self.notebook = notebook
 
@@ -188,13 +189,13 @@ class ElisaCalculatorApp:
         notebook.add(file_tab, text='文件导入')
         notebook.add(paste_tab, text='直接粘贴')
 
-        file_inner = tk.Frame(file_tab, bg=self.colors['panel'], padx=18, pady=18)
+        file_inner = tk.Frame(file_tab, bg=self.colors['panel'], padx=10, pady=10)
         file_inner.pack(fill='x', anchor='n')
         ttk.Label(file_inner, text='从 CSV / 文本文件导入', style='Title.TLabel').pack(anchor='w')
         ttk.Label(
             file_inner,
             text='支持 utf-8 / gbk / gb18030 等常见编码, 程序会自动识别是否存在表头',
-            style='Body.TLabel', wraplength=620
+            style='Body.TLabel', wraplength=560
         ).pack(anchor='w', pady=(6, 14))
 
         row = tk.Frame(file_inner, bg=self.colors['panel'])
@@ -204,7 +205,7 @@ class ElisaCalculatorApp:
         ttk.Button(row, text='浏览文件', style='Soft.TButton', command=self.select_file).pack(side='left', padx=(10, 0))
 
         recent_row = tk.Frame(file_inner, bg=self.colors['panel'])
-        recent_row.pack(fill='x', pady=(10, 0))
+        recent_row.pack(fill='x', pady=(8, 0))
         tk.Label(
             recent_row,
             text='最近文件',
@@ -217,49 +218,49 @@ class ElisaCalculatorApp:
         self.cmb_recent_files.bind('<<ComboboxSelected>>', self._apply_recent_file)
 
         hint_box = tk.Frame(file_inner, bg='#F8FBFF', highlightthickness=1, highlightbackground=self.colors['border'])
-        hint_box.pack(fill='x', pady=(12, 0))
+        hint_box.pack(fill='x', pady=(10, 0))
         tk.Label(
             hint_box,
             text='格式要求: 第一列为浓度, 后续每列为一个组, 兼容无表头数据',
-            bg='#F8FBFF', fg=self.colors['muted'], font=('Segoe UI', 9), justify='left', wraplength=640, padx=12, pady=10
+            bg='#F8FBFF', fg=self.colors['muted'], font=('Segoe UI', 9), justify='left', wraplength=560, padx=10, pady=8
         ).pack(anchor='w')
 
-        paste_inner = tk.Frame(paste_tab, bg=self.colors['panel'], padx=18, pady=18)
+        paste_inner = tk.Frame(paste_tab, bg=self.colors['panel'], padx=10, pady=10)
         paste_inner.pack(fill='both', expand=True)
         ttk.Label(paste_inner, text='粘贴 Excel / 文本数据', style='Title.TLabel').pack(anchor='w')
         ttk.Label(
             paste_inner,
             text='支持逗号, Tab, 或空格分隔, 若首列全部为数字, 则按无表头数据处理, 并使用默认列名',
-            style='Body.TLabel', wraplength=640
+            style='Body.TLabel', wraplength=560
         ).pack(anchor='w', pady=(6, 12))
 
-        paste_box_wrap, self.text_paste_input = self._make_textbox(paste_inner, height=11, font=('Consolas', 10))
+        paste_box_wrap, self.text_paste_input = self._make_textbox(paste_inner, height=7, font=('Consolas', 10))
         paste_box_wrap.pack(fill='both', expand=True)
 
         paste_btn_row = tk.Frame(paste_inner, bg=self.colors['panel'])
-        paste_btn_row.pack(fill='x', pady=(10, 0))
+        paste_btn_row.pack(fill='x', pady=(8, 0))
         ttk.Button(paste_btn_row, text='从剪贴板粘贴', style='Soft.TButton', command=self.paste_from_clipboard).pack(side='left')
         ttk.Button(paste_btn_row, text='清空粘贴区', style='Soft.TButton', command=self.clear_paste).pack(side='left', padx=(8, 0))
 
         notebook.select(paste_tab)
 
-        action_wrap, action_inner = self._make_card(left, padding=16)
+        action_wrap, action_inner = self._make_card(left, padding=10)
         action_wrap.pack(fill='both', expand=True)
         top_action = tk.Frame(action_inner, bg=self.colors['panel'])
         top_action.pack(fill='x')
         tk.Label(top_action, text='执行与状态', bg=self.colors['panel'], fg=self.colors['text'], font=('Segoe UI', 12, 'bold')).pack(side='left')
         tk.Label(top_action, textvariable=self.status_var, bg=self.colors['panel'], fg=self.colors['success'], font=('Segoe UI', 10, 'bold')).pack(side='right')
         self.progress = ttk.Progressbar(action_inner, mode='indeterminate')
-        self.progress.pack(fill='x', pady=(8, 0))
+        self.progress.pack(fill='x', pady=(6, 0))
 
         tk.Label(
             action_inner,
             text='计算完成后会自动输出: EC50_Summary.csv, 每组拟合曲线图, 以及所有组总览图',
-            bg=self.colors['panel'], fg=self.colors['subtext'], font=('Segoe UI', 10), wraplength=760, justify='left'
+            bg=self.colors['panel'], fg=self.colors['subtext'], font=('Segoe UI', 10), wraplength=660, justify='left'
         ).pack(anchor='w', pady=(6, 12))
 
         primary_btn_row = tk.Frame(action_inner, bg=self.colors['panel'])
-        primary_btn_row.pack(fill='x', pady=(2, 0))
+        primary_btn_row.pack(fill='x', pady=(0, 0))
         self.btn_preview = ttk.Button(
             primary_btn_row,
             text='预览解析',
@@ -276,7 +277,7 @@ class ElisaCalculatorApp:
         self.btn_calculate.pack(side='left', fill='x', expand=True, padx=(10, 0))
 
         btn_row = tk.Frame(action_inner, bg=self.colors['panel'])
-        btn_row.pack(fill='x', pady=(10, 0))
+        btn_row.pack(fill='x', pady=(8, 0))
         ttk.Button(btn_row, text='清空当前输入', style='Soft.TButton', command=self.clear_current_input).pack(side='left')
         ttk.Button(btn_row, text='复制输出日志', style='Soft.TButton', command=self.copy_output_to_clipboard).pack(side='left', padx=(10, 0))
         self.btn_open_output = ttk.Button(btn_row, text='打开输出目录', style='Soft.TButton', command=self.open_output_dir)
@@ -284,7 +285,7 @@ class ElisaCalculatorApp:
         ttk.Button(btn_row, text='清空输出日志', style='Soft.TButton', command=self.clear_output).pack(side='left', padx=(10, 0))
 
         mapping_wrap = tk.Frame(action_inner, bg='#F8FBFF', highlightthickness=1, highlightbackground=self.colors['border'])
-        mapping_wrap.pack(fill='x', pady=(10, 0))
+        mapping_wrap.pack(fill='x', pady=(8, 0))
         tk.Label(
             mapping_wrap,
             text='列映射确认',
@@ -327,7 +328,7 @@ class ElisaCalculatorApp:
         y_list_wrap.pack(fill='x', padx=12, pady=(4, 6))
         self.list_ycols = tk.Listbox(
             y_list_wrap,
-            height=5,
+            height=4,
             selectmode=tk.MULTIPLE,
             exportselection=False,
             relief='flat',
@@ -338,26 +339,23 @@ class ElisaCalculatorApp:
         self.list_ycols.bind('<<ListboxSelect>>', self._on_y_columns_changed)
 
         y_btn_row = tk.Frame(mapping_wrap, bg='#F8FBFF')
-        y_btn_row.pack(fill='x', padx=12, pady=(0, 10))
+        y_btn_row.pack(fill='x', padx=12, pady=(0, 8))
         ttk.Button(y_btn_row, text='全选分组', style='Soft.TButton', command=self.select_all_y_columns).pack(side='left')
         ttk.Button(y_btn_row, text='清空分组', style='Soft.TButton', command=self.clear_y_columns).pack(side='left', padx=(8, 0))
 
-        note_spacer = tk.Frame(action_inner, bg=self.colors['panel'])
-        note_spacer.pack(fill='both', expand=True)
-
         note_row = tk.Frame(action_inner, bg=self.colors['panel'])
-        note_row.pack(fill='x', pady=(10, 0))
+        note_row.pack(fill='x', pady=(8, 0))
         tk.Label(
             note_row,
             text='提示: 运行过程中请勿关闭程序, 否则可能会导致数据丢失',
             bg=self.colors['panel'], fg=self.colors['muted'], font=('Segoe UI', 9), justify='left'
         ).pack(side='left', anchor='w')
 
-        result_wrap, result_inner = self._make_card(right, padding=16)
+        result_wrap, result_inner = self._make_card(right, padding=10)
         result_wrap.pack(fill='both', expand=True)
         head = tk.Frame(result_inner, bg=self.colors['panel'])
         head.pack(fill='x')
-        ttk.Label(head, text='运行日志与结果汇总', style='Title.TLabel').pack(side='left')
+        ttk.Label(head, text='分析视图', style='Title.TLabel').pack(side='left')
         tk.Label(
             head,
             text='',
@@ -366,12 +364,22 @@ class ElisaCalculatorApp:
 
         ttk.Label(
             result_inner,
-            text='先看解析摘要，再查看详细日志和结果输出',
-            style='Body.TLabel', wraplength=340
-        ).pack(anchor='w', pady=(6, 12))
+            text='按标签查看：摘要预览、结果浏览、运行日志',
+            style='Body.TLabel', wraplength=320
+        ).pack(anchor='w', pady=(2, 6))
 
-        summary_wrap = tk.Frame(result_inner, bg='#F8FBFF', highlightthickness=1, highlightbackground=self.colors['border'])
-        summary_wrap.pack(fill='x', pady=(0, 12))
+        self.right_tabs = ttk.Notebook(result_inner, style='Modern.TNotebook')
+        self.right_tabs.pack(fill='both', expand=True)
+
+        summary_tab = tk.Frame(self.right_tabs, bg=self.colors['panel'])
+        result_tab = tk.Frame(self.right_tabs, bg=self.colors['panel'])
+        log_tab = tk.Frame(self.right_tabs, bg=self.colors['panel'])
+        self.right_tabs.add(summary_tab, text='摘要预览')
+        self.right_tabs.add(result_tab, text='结果浏览')
+        self.right_tabs.add(log_tab, text='运行日志')
+
+        summary_wrap = tk.Frame(summary_tab, bg='#F8FBFF', highlightthickness=1, highlightbackground=self.colors['border'])
+        summary_wrap.pack(fill='x', pady=(2, 6), padx=2)
         self._add_summary_row(summary_wrap, '数据源', self.summary_vars['source'])
         self._add_summary_row(summary_wrap, '数据形状', self.summary_vars['shape'])
         self._add_summary_row(summary_wrap, '检测组数', self.summary_vars['groups'])
@@ -387,14 +395,14 @@ class ElisaCalculatorApp:
         tk.Label(stats_row, text='输出文件', bg='#F8FBFF', fg=self.colors['muted'], font=('Segoe UI', 9)).pack(side='left')
         tk.Label(stats_row, textvariable=self.summary_vars['output_files'], bg='#F8FBFF', fg=self.colors['text'], font=('Segoe UI', 9, 'bold')).pack(side='left', padx=(6, 0))
 
-        summary_action_row = tk.Frame(summary_wrap, bg='#F8FBFF', padx=12, pady=(0, 10))
+        summary_action_row = tk.Frame(summary_wrap, bg='#F8FBFF', padx=12, pady=10)
         summary_action_row.pack(fill='x')
         self.btn_show_warnings = ttk.Button(summary_action_row, text='查看告警详情', style='Soft.TButton', command=self.show_warning_details)
         self.btn_show_warnings.pack(side='left')
         self.btn_open_from_summary = ttk.Button(summary_action_row, text='打开输出目录', style='Soft.TButton', command=self.open_output_dir)
         self.btn_open_from_summary.pack(side='left', padx=(8, 0))
 
-        preview_head = tk.Frame(result_inner, bg=self.colors['panel'])
+        preview_head = tk.Frame(summary_tab, bg=self.colors['panel'])
         preview_head.pack(fill='x')
         ttk.Label(preview_head, text='解析预览', style='Title.TLabel').pack(side='left')
         ttk.Label(
@@ -403,11 +411,11 @@ class ElisaCalculatorApp:
             style='Muted.TLabel'
         ).pack(side='right')
 
-        preview_wrap, self.text_preview = self._make_textbox(result_inner, height=9, font=('Consolas', 10))
-        preview_wrap.pack(fill='x', pady=(8, 12))
+        preview_wrap, self.text_preview = self._make_textbox(summary_tab, height=7, font=('Consolas', 10))
+        preview_wrap.pack(fill='both', expand=True, pady=(6, 0), padx=2)
 
-        browse_head = tk.Frame(result_inner, bg=self.colors['panel'])
-        browse_head.pack(fill='x')
+        browse_head = tk.Frame(result_tab, bg=self.colors['panel'])
+        browse_head.pack(fill='x', pady=(4, 0), padx=2)
         ttk.Label(browse_head, text='结果浏览', style='Title.TLabel').pack(side='left')
         self.entry_result_search = ttk.Entry(browse_head, textvariable=self.result_search_var, width=18)
         self.entry_result_search.pack(side='right', padx=(0, 8))
@@ -431,11 +439,11 @@ class ElisaCalculatorApp:
         self.cmb_result_filter.pack(side='right', padx=(0, 8))
         self.cmb_result_filter.bind('<<ComboboxSelected>>', self._on_result_filter_changed)
 
-        result_list_wrap = tk.Frame(result_inner, bg=self.colors['panel'])
-        result_list_wrap.pack(fill='x', pady=(8, 8))
+        result_list_wrap = tk.Frame(result_tab, bg=self.colors['panel'])
+        result_list_wrap.pack(fill='x', pady=(6, 6), padx=2)
         self.list_results = tk.Listbox(
             result_list_wrap,
-            height=7,
+            height=6,
             selectmode=tk.SINGLE,
             exportselection=False,
             relief='flat',
@@ -445,8 +453,8 @@ class ElisaCalculatorApp:
         self.list_results.pack(fill='x')
         self.list_results.bind('<<ListboxSelect>>', self._on_result_selected)
 
-        result_action_row = tk.Frame(result_inner, bg=self.colors['panel'])
-        result_action_row.pack(fill='x', pady=(0, 12))
+        result_action_row = tk.Frame(result_tab, bg=self.colors['panel'])
+        result_action_row.pack(fill='x', pady=(0, 8), padx=2)
         self.btn_result_detail = ttk.Button(result_action_row, text='查看选中详情', style='Soft.TButton', command=self.show_selected_result_detail)
         self.btn_result_detail.pack(side='left')
         self.btn_result_copy = ttk.Button(result_action_row, text='复制当前组报告', style='Soft.TButton', command=self.copy_selected_result_detail)
@@ -459,24 +467,21 @@ class ElisaCalculatorApp:
         self.btn_result_overview.pack(side='left', padx=(8, 0))
 
         tk.Label(
-            result_inner,
+            result_tab,
             textvariable=self.result_detail_var,
             bg=self.colors['panel'],
             fg=self.colors['muted'],
             font=('Segoe UI', 9),
             justify='left',
             anchor='w',
-            wraplength=340
-        ).pack(fill='x', pady=(0, 12))
+            wraplength=320
+        ).pack(fill='x', pady=(0, 6), padx=2)
 
-        ttk.Label(
-            result_inner,
-            text='运行日志',
-            style='Title.TLabel'
-        ).pack(anchor='w', pady=(0, 8))
-
-        output_wrap, self.text_output = self._make_textbox(result_inner, height=18, font=('Consolas', 10))
+        output_wrap, self.text_output = self._make_textbox(log_tab, height=12, font=('Consolas', 10))
         output_wrap.pack(fill='both', expand=True)
+
+        self.right_tabs.select(summary_tab)
+        self.root.after(0, self._set_default_focus)
 
         footer = tk.Label(
             main,
@@ -488,6 +493,21 @@ class ElisaCalculatorApp:
     def append_output(self, text):
         self.text_output.insert(tk.END, text)
         self.text_output.see(tk.END)
+
+    def _set_default_focus(self):
+        # Default to paste workflow: paste data first, then preview/calculate.
+        try:
+            self.notebook.select(1)
+            self.text_paste_input.focus_set()
+        except Exception:
+            pass
+
+    def _select_result_browser_tab(self):
+        try:
+            if hasattr(self, 'right_tabs'):
+                self.right_tabs.select(1)
+        except Exception:
+            pass
 
     def _bind_shortcuts(self):
         self.root.bind('<Control-Return>', lambda _event: self.start_unified_calculation())
@@ -599,6 +619,13 @@ class ElisaCalculatorApp:
 
     def _set_column_options(self, columns, preferred_x=None, preferred_y=None):
         self.available_columns = list(columns)
+        current_x_state = str(self.cmb_xcol.cget('state'))
+        current_y_state = str(self.list_ycols.cget('state'))
+        if current_x_state == 'disabled':
+            self.cmb_xcol.configure(state='readonly')
+        if current_y_state == 'disabled':
+            self.list_ycols.configure(state='normal')
+
         self.cmb_xcol['values'] = self.available_columns
 
         if not self.available_columns:
@@ -606,6 +633,10 @@ class ElisaCalculatorApp:
             self.list_ycols.delete(0, tk.END)
             self.selected_y_cols = []
             self.y_col_count_var.set('0')
+            if current_x_state == 'disabled':
+                self.cmb_xcol.configure(state='disabled')
+            if current_y_state == 'disabled':
+                self.list_ycols.configure(state='disabled')
             return
 
         current_x = self.x_col_var.get()
@@ -614,8 +645,14 @@ class ElisaCalculatorApp:
         if current_x not in self.available_columns:
             current_x = self.available_columns[0]
         self.x_col_var.set(current_x)
-        restore_y = preferred_y if preferred_y is not None else self.selected_y_cols
+        # Default behavior: first column as concentration, all remaining columns as groups.
+        restore_y = preferred_y if preferred_y is not None else [col for col in self.available_columns if col != current_x]
         self._refresh_y_columns_by_x(current_x, preferred_y=restore_y)
+
+        if current_x_state == 'disabled':
+            self.cmb_xcol.configure(state='disabled')
+        if current_y_state == 'disabled':
+            self.list_ycols.configure(state='disabled')
 
     def _refresh_y_columns_by_x(self, x_col, preferred_y=None):
         y_candidates = [col for col in self.available_columns if col != x_col]
@@ -623,14 +660,18 @@ class ElisaCalculatorApp:
         self.list_ycols.delete(0, tk.END)
         for col in y_candidates:
             self.list_ycols.insert(tk.END, str(col))
+        selected_cols = []
         if y_candidates:
             selected_any = False
             for idx, col in enumerate(y_candidates):
                 if col in preferred:
                     self.list_ycols.select_set(idx)
+                    selected_cols.append(col)
                     selected_any = True
             if not selected_any:
                 self.list_ycols.select_set(0, tk.END)
+                selected_cols = list(y_candidates)
+        self.selected_y_cols = selected_cols
         self._on_y_columns_changed()
 
     def _on_x_column_changed(self, _event=None):
@@ -1208,9 +1249,13 @@ class ElisaCalculatorApp:
         self.summary_vars['success_groups'].set('0')
         self.summary_vars['warning_groups'].set('0')
         self.summary_vars['output_files'].set('0')
+        self.result_filter_var.set('全部')
+        self.result_sort_var.set('告警优先')
+        self.result_search_var.set('')
         self.latest_results = []
         self.latest_warning_rows = []
         self.latest_export_files = []
+        self.last_output_dir = None
         self.result_detail_var.set('未选择条目')
         self._refresh_result_browser()
 
@@ -1226,6 +1271,7 @@ class ElisaCalculatorApp:
 
         df = parse_result.df
         meta = parse_result.meta
+        previous_columns = list(self.available_columns)
         lines = [
             f"来源: {parse_result.source_label}",
             f"表头识别: {meta.get('header_note', '')}",
@@ -1240,6 +1286,8 @@ class ElisaCalculatorApp:
         preferred_x = saved_profile.get('x_col') if saved_profile else None
         preferred_y = saved_profile.get('y_cols') if saved_profile else None
         self._set_column_options(columns, preferred_x=preferred_x, preferred_y=preferred_y)
+        if columns and list(columns) != previous_columns:
+            self._select_result_browser_tab()
         self.summary_vars['source'].set(parse_result.source_label)
         self.summary_vars['shape'].set(f'{df.shape[0]} 行 x {df.shape[1]} 列')
         self.summary_vars['groups'].set(str(len(self.list_ycols.curselection())))
@@ -1256,6 +1304,7 @@ class ElisaCalculatorApp:
             self.latest_results = []
             self.latest_warning_rows = []
             self.latest_export_files = []
+            self.last_output_dir = None
             return
 
         if calculation_result.status_msg == 'Success' and calculation_result.report is not None:
@@ -1279,10 +1328,12 @@ class ElisaCalculatorApp:
             self.summary_vars['export'].set('未导出')
             self.summary_vars['output_files'].set('0')
             self.latest_export_files = []
+            self.last_output_dir = None
         else:
             self.summary_vars['export'].set(f"已导出 {len(export_result.saved_files)} 个文件")
             self.summary_vars['output_files'].set(str(len(export_result.saved_files)))
             self.latest_export_files = export_result.saved_files
+            self.last_output_dir = export_result.output_dir
 
     def get_current_input_payload(self):
         raw_text = self.text_paste_input.get('1.0', tk.END).strip()
@@ -1341,6 +1392,7 @@ class ElisaCalculatorApp:
             messagebox.showerror('错误', f'无法打开输出目录：{e}')
 
     def set_busy(self, is_busy, status_text=None):
+        self.is_busy = is_busy
         self.btn_preview.configure(state=('disabled' if is_busy else 'normal'))
         self.btn_calculate.configure(state=('disabled' if is_busy else 'normal'))
         self.btn_show_warnings.configure(state=('disabled' if is_busy else 'normal'))
@@ -1549,6 +1601,7 @@ class ElisaCalculatorApp:
                 for fp in export_result.saved_files:
                     log_lines.append(f'  · {os.path.basename(fp)}\n')
             else:
+                self.last_output_dir = None
                 log_lines.append('未生成有效结果，无需保存。\n')
 
         except Exception as e:

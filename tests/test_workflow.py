@@ -11,6 +11,10 @@ from elisa_calculator.services.workflow import (
 
 
 class TestWorkflow(unittest.TestCase):
+    @staticmethod
+    def _failing_calculator(_df, **_kwargs):
+        return [], 'global fitting failed: mock failure', 0, None
+
     def test_parse_stage_failure(self):
         parse_result = parse_workflow_input('')
 
@@ -78,6 +82,38 @@ class TestWorkflow(unittest.TestCase):
         self.assertIsNotNone(result.report)
         self.assertTrue(result.report.fit_success)
         self.assertIsNotNone(result.output_dir)
+
+    def test_calculation_stage_failure_marks_not_ok(self):
+        data_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'test_data.csv')
+        raw_text, _, err = read_text_file_with_fallbacks(data_file)
+        self.assertIsNotNone(raw_text, msg=f'read failed: {err}')
+        parse_result = parse_workflow_input(raw_text, source_label='Paste')
+        self.assertTrue(parse_result.ok)
+
+        calculation_result = calculate_workflow_report(
+            parse_result.df,
+            calculator=self._failing_calculator,
+        )
+        self.assertFalse(calculation_result.ok)
+        self.assertIn('global fitting failed', calculation_result.error)
+        self.assertEqual(calculation_result.status_msg, 'global fitting failed: mock failure')
+        self.assertIsNone(calculation_result.report)
+
+    def test_run_workflow_failure_marks_not_ok(self):
+        data_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'test_data.csv')
+        raw_text, _, err = read_text_file_with_fallbacks(data_file)
+        self.assertIsNotNone(raw_text, msg=f'read failed: {err}')
+
+        result = run_calculation_workflow(
+            raw_text,
+            source_label='Paste',
+            calculator=self._failing_calculator,
+        )
+        self.assertFalse(result.ok)
+        self.assertIn('global fitting failed', result.error)
+        self.assertEqual(result.status_msg, 'global fitting failed: mock failure')
+        self.assertEqual(result.saved_files, [])
+        self.assertIsNone(result.output_dir)
 
 
 if __name__ == '__main__':
