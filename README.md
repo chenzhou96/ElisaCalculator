@@ -1,10 +1,7 @@
 # ElisaCalculator
 
-ELISA 4PL Global Fit 工具，支持 GUI 导入/粘贴数据，进行共享 A/D 的全局拟合，并导出汇总与图片。
-当前仓库包含两套界面：
-
-- **Tk GUI**：原有 Python 桌面界面，兼容现有使用方式。
-- **Tauri + React GUI**：新的现代桌面界面，前端使用 TypeScript / React，计算仍复用 Python 核心逻辑。
+ELISA 4PL Global Fit 工具，支持导入/粘贴数据，进行共享 A/D 的全局拟合，并导出汇总与图片。
+当前仓库使用 **Tauri + React GUI** 作为唯一桌面界面，计算复用 Python 核心逻辑。
 
 ## 项目结构
 
@@ -14,14 +11,13 @@ ElisaCalculator/
 ├── desktop-ui/                   # 新的 Tauri + React 桌面界面
 ├── elisa_calculator/
 │   ├── __main__.py               # python -m 入口
-│   ├── app.py                    # 应用启动
+│   ├── app.py                    # 兼容入口（转发到 bridge）
 │   ├── bridge.py                 # JSON 桥接层，供新 GUI 调用
 │   ├── common.py                 # 通用工具
 │   ├── core/                     # 模型与计算
 │   ├── io/                       # 读取、写出、表格格式化
 │   ├── visualization/            # 字体与绘图
-│   ├── services/                 # 计算工作流编排（扩展点）
-│   └── gui/                      # Tk 界面
+│   └── services/                 # 计算工作流编排（扩展点）
 ├── tests/                        # 最小回归测试
 └── docs/
     └── EXTENDING.md              # 扩展说明
@@ -29,16 +25,28 @@ ElisaCalculator/
 
 ## 运行
 
-### 运行原 Tk GUI
+### 安装 Python 最小依赖
 
 ```bash
-python -m elisa_calculator
+python -m pip install -r requirements.txt
+```
+
+如需构建桥接可执行文件（PyInstaller），使用：
+
+```bash
+python -m pip install -r requirements-build.txt
+```
+
+### 运行 Python 桥接（CLI）
+
+```bash
+python -m elisa_calculator.bridge --request-file request.json
 ```
 
 兼容入口也可用：
 
 ```bash
-python ElisaCalculator.py
+python -m elisa_calculator --request-file request.json
 ```
 
 ### 运行新 Tauri + React GUI
@@ -98,6 +106,11 @@ npm run tauri build -- --bundles nsis
 
 当前桌面版通过 Python 桥接运行计算逻辑，目标机器需要可用的 Python 环境及依赖（如 numpy/pandas/scipy/matplotlib）。
 
+建议直接使用仓库内依赖清单：
+
+- `requirements.txt`：运行时最小依赖
+- `requirements-build.txt`：构建桥接 exe 所需依赖（包含 PyInstaller）
+
 本仓库已将 `elisa_calculator` 包作为 Tauri 资源纳入构建，发布版会在运行时自动查找资源目录。
 
 ### 4) 离线打包（无外网）
@@ -119,10 +132,3 @@ npm run tauri:build:nsis:offline
 npm run tauri:build:msi:offline
 ```
 
-## 扩展建议
-
-1. 新增算法：在 `core` 增加新的拟合函数，并在 `services/workflow.py` 注入 `calculator`。
-2. 新增导出：实现新的 `output_saver` 并注入工作流，可导出 Excel/JSON。
-3. 新增入口：可基于 `services/workflow.py` 快速添加 CLI，而无需改 GUI 代码。
-
-更多细节见 `docs/EXTENDING.md`。

@@ -1,5 +1,5 @@
-from elisa_calculator.app import main
+from elisa_calculator.bridge import main
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

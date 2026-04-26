@@ -1,5 +1,5 @@
 """ELISA calculator package."""
 
-from .app import main
+from .bridge import main
 
 __all__ = ["main"]
