@@ -1,0 +1,273 @@
+import numpy as np
+import pandas as pd
+from scipy.optimize import curve_fit
+from scipy.stats import spearmanr
+
+from .model import four_param_logistic, global_four_param_logistic_model
+
+
+def prepare_group_data(df, x_col_name=None, y_cols_names=None):
+    removed_x_nonpositive_total = 0
+    groups = []
+
+    if df is None or df.empty:
+        return None, 'data is empty', removed_x_nonpositive_total
+
+    columns = df.columns.tolist()
+    if len(columns) < 2:
+        return None, 'insufficient columns', removed_x_nonpositive_total
+
+    if x_col_name is None:
+        x_col_name = columns[0]
+    if y_cols_names is None:
+        y_cols_names = columns[1:]
+
+    if x_col_name not in df.columns:
+        return None, f'missing x column: {x_col_name}', removed_x_nonpositive_total
+
+    x_raw_series = df[x_col_name]
+
+    for idx, y_col in enumerate(y_cols_names):
+        if y_col not in df.columns:
+            continue
+
+        tmp = pd.DataFrame({'x': x_raw_series, 'y': df[y_col]})
+        n_input = len(tmp)
+        tmp = tmp.apply(pd.to_numeric, errors='coerce')
+        n_after_numeric = len(tmp.dropna())
+        tmp = tmp.dropna().copy()
+        n_non_numeric_removed = n_input - n_after_numeric
+
+        nonpositive_mask = tmp['x'] <= 0
+        removed_nonpositive = int(nonpositive_mask.sum())
+        if removed_nonpositive > 0:
+            tmp = tmp.loc[~nonpositive_mask].copy()
+        removed_x_nonpositive_total += removed_nonpositive
+
+        notes = []
+        if n_non_numeric_removed > 0:
+            notes.append(f'removed non-numeric/missing {n_non_numeric_removed}')
+        if removed_nonpositive > 0:
+            notes.append(f'removed non-positive concentration {removed_nonpositive}')
+
+        if len(tmp) < 3:
+            groups.append({
+                'group_index': idx,
+                'group_name': y_col,
+                'x': np.array([], dtype=float),
+                'y': np.array([], dtype=float),
+                'status': 'Skipped',
+                'skip_reason': 'valid points less than 3',
+                'pre_notes': notes,
+                'n_points': len(tmp),
+            })
+            continue
+
+        x = tmp['x'].to_numpy(dtype=float)
+        y = tmp['y'].to_numpy(dtype=float)
+
+        groups.append({
+            'group_index': idx,
+            'group_name': y_col,
+            'x': x,
+            'y': y,
+            'status': 'Ready',
+            'skip_reason': '',
+            'pre_notes': notes,
+            'n_points': len(tmp),
+        })
+
+    if not groups:
+        return None, 'no valid groups', removed_x_nonpositive_total
+
+    ready_groups = [g for g in groups if g['status'] == 'Ready']
+    if not ready_groups:
+        return None, 'no groups ready for fitting', removed_x_nonpositive_total
+
+    return {
+        'x_col_name': x_col_name,
+        'groups': groups,
+        'ready_groups': ready_groups,
+    }, 'Success', removed_x_nonpositive_total
+
+
+def build_group_warning_notes(x, y, ec50, r2):
+    notes = []
+    if len(x) < 4:
+        notes.append('few data points')
+
+    y_range = float(np.max(y) - np.min(y)) if len(y) else np.nan
+    if np.isfinite(y_range) and y_range < 0.3:
+        notes.append('small response range')
+
+    try:
+        rho, _ = spearmanr(x, y)
+        if np.isfinite(rho) and abs(rho) < 0.7:
+            notes.append(f'weak monotonicity(r={rho:.2f})')
+    except Exception:
+        pass
+
+    x_min, x_max = np.min(x), np.max(x)
+    if np.isfinite(ec50):
+        if ec50 < x_min or ec50 > x_max:
+            notes.append('EC50 out of concentration range')
+    else:
+        notes.append('EC50 unavailable')
+
+    if np.isfinite(r2) and r2 < 0.90:
+        notes.append(f'low fit quality(R2={r2:.3f})')
+
+    return notes
+
+
+def calculate_ec50_global_df(df, x_col_name=None, y_cols_names=None):
+    prepared, status_msg, removed_count = prepare_group_data(df, x_col_name, y_cols_names)
+    if prepared is None:
+        return [], status_msg, removed_count, None
+
+    ready_groups = prepared['ready_groups']
+    all_x = np.concatenate([g['x'] for g in ready_groups]).astype(float)
+    all_y = np.concatenate([g['y'] for g in ready_groups]).astype(float)
+
+    group_id_map = {g['group_index']: i for i, g in enumerate(ready_groups)}
+    group_indices = np.concatenate([
+        np.full(len(g['x']), group_id_map[g['group_index']], dtype=int)
+        for g in ready_groups
+    ])
+    n_groups = len(ready_groups)
+
+    global_y_min = float(np.min(all_y))
+    global_y_max = float(np.max(all_y))
+    initial_params = [global_y_min, global_y_max]
+
+    for g in ready_groups:
+        x_grp, y_grp = g['x'], g['y']
+        init_b = -1.0 if (len(y_grp) > 1 and y_grp[0] > y_grp[-1]) else 1.0
+        med = np.median(x_grp)
+        init_c = med if med > 0 else 1.0
+        initial_params.extend([init_b, init_c])
+
+    initial_params = np.array(initial_params, dtype=float)
+    lower_bounds = [-np.inf, -np.inf] + [-np.inf, 1e-12] * n_groups
+    upper_bounds = [np.inf, np.inf] + [np.inf, np.inf] * n_groups
+
+    fit_model = lambda x, A, D, *bc_flat: global_four_param_logistic_model(
+        x, group_indices, n_groups, A, D, *bc_flat
+    )
+
+    try:
+        popt, _ = curve_fit(
+            fit_model,
+            all_x,
+            all_y,
+            p0=initial_params,
+            maxfev=20000,
+            bounds=(lower_bounds, upper_bounds)
+        )
+    except Exception as e:
+        return [], f'global fitting failed: {str(e)}', removed_count, {
+            'prepared': prepared,
+            'fit_success': False,
+            'fit_error': str(e),
+        }
+
+    global_A = float(popt[0])
+    global_D = float(popt[1])
+
+    summary_rows = []
+    detailed_rows = []
+
+    for g in prepared['groups']:
+        row = {
+            'Group': g['group_name'],
+            'N': g.get('n_points', 0),
+            'EC50': np.nan,
+            'Slope': np.nan,
+            'Global_A': global_A,
+            'Global_D': global_D,
+            'R2': np.nan,
+            'RMSE': np.nan,
+            'X_min': np.nan,
+            'X_max': np.nan,
+            'Y_min': np.nan,
+            'Y_max': np.nan,
+            'Status': 'Skipped' if g['status'] != 'Ready' else 'Unknown',
+            'Warning': '; '.join(g.get('pre_notes', [])),
+        }
+
+        detail = {
+            'group_name': g['group_name'],
+            'x': g.get('x', np.array([], dtype=float)),
+            'y': g.get('y', np.array([], dtype=float)),
+            'y_pred': None,
+            'status': row['Status'],
+            'warning_list': list(g.get('pre_notes', [])),
+            'skip_reason': g.get('skip_reason', ''),
+        }
+
+        if g['status'] != 'Ready':
+            if g.get('skip_reason'):
+                detail['warning_list'].append(g['skip_reason'])
+            row['Warning'] = '; '.join(detail['warning_list'])
+            detailed_rows.append(detail)
+            summary_rows.append(row)
+            continue
+
+        fit_idx = group_id_map[g['group_index']]
+        idx_b = 2 + fit_idx * 2
+        idx_c = idx_b + 1
+        b_val = float(popt[idx_b])
+        c_val = float(popt[idx_c])
+
+        x = g['x']
+        y = g['y']
+        y_pred = four_param_logistic(x, global_A, b_val, c_val, global_D)
+
+        ss_res = float(np.sum((y - y_pred) ** 2))
+        ss_tot = float(np.sum((y - np.mean(y)) ** 2))
+        r2 = np.nan if ss_tot == 0 else 1 - ss_res / ss_tot
+        rmse = float(np.sqrt(np.mean((y - y_pred) ** 2)))
+
+        warn_list = list(g.get('pre_notes', []))
+        warn_list.extend(build_group_warning_notes(x, y, c_val, r2))
+        warn_list = list(dict.fromkeys([w for w in warn_list if w]))
+
+        row.update({
+            'EC50': c_val,
+            'Slope': b_val,
+            'R2': r2,
+            'RMSE': rmse,
+            'X_min': float(np.min(x)),
+            'X_max': float(np.max(x)),
+            'Y_min': float(np.min(y)),
+            'Y_max': float(np.max(y)),
+            'Status': 'Success',
+            'Warning': '; '.join(warn_list),
+        })
+
+        detail.update({
+            'y_pred': y_pred,
+            'status': 'Success',
+            'warning_list': warn_list,
+            'params': {
+                'A': global_A,
+                'B': b_val,
+                'C': c_val,
+                'D': global_D,
+            },
+            'r2': r2,
+            'rmse': rmse,
+        })
+
+        detailed_rows.append(detail)
+        summary_rows.append(row)
+
+    detail_obj = {
+        'prepared': prepared,
+        'fit_success': True,
+        'fit_error': '',
+        'global_params': {'A': global_A, 'D': global_D},
+        'summary_rows': summary_rows,
+        'detailed_rows': detailed_rows,
+    }
+    return summary_rows, 'Success', removed_count, detail_obj

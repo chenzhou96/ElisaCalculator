@@ -1,2 +1,2 @@
-ElisaCalculator_V1.1.exe
-.vscode/*
+.vscode
+*_pycache__*
