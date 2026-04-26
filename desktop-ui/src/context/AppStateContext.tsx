@@ -3,6 +3,28 @@ import type { ViewType, TabType } from '../types/layout'
 import type { ParseResponse, RunResponse } from '../types/bridge'
 import { callBridge } from '../hooks/useBridge'
 
+function sanitizeGroupName(name: string) {
+  const trimmed = String(name ?? '').trim()
+  if (!trimmed) return 'group'
+  return trimmed.replace(/[\\/:*?"<>|]+/g, '_')
+}
+
+function basename(path: string) {
+  return String(path ?? '').replace(/^.*[\\/]/, '')
+}
+
+function sortPlotFiles(plotFiles: string[]) {
+  return [...plotFiles].sort((a, b) => {
+    const aName = basename(a)
+    const bName = basename(b)
+    const aOverview = aName === 'EC50_AllGroups_Overview.png'
+    const bOverview = bName === 'EC50_AllGroups_Overview.png'
+    if (aOverview && !bOverview) return -1
+    if (!aOverview && bOverview) return 1
+    return aName.localeCompare(bName)
+  })
+}
+
 /* ── State ── */
 
 export interface AppState {
@@ -109,7 +131,23 @@ function reducer(state: AppState, action: AppAction): AppState {
     case 'SET_SELECTED_X_COLUMN':
       return { ...state, selectedXColumn: action.column }
     case 'SET_SELECTED_PLOT_PATH':
-      return { ...state, selectedPlotPath: action.path }
+      {
+        const nextState: AppState = { ...state, selectedPlotPath: action.path }
+        const detailRows = state.runResult?.report?.detailed_rows ?? []
+        const fileName = basename(action.path)
+        if (!fileName || fileName === 'EC50_AllGroups_Overview.png') {
+          return nextState
+        }
+
+        if (fileName.endsWith('_fit.png')) {
+          const groupKey = fileName.slice(0, -8)
+          const mappedIndex = detailRows.findIndex((row) => sanitizeGroupName(row.group_name) === groupKey)
+          if (mappedIndex >= 0) {
+            nextState.selectedGroupIndex = mappedIndex
+          }
+        }
+        return nextState
+      }
     case 'SET_SAVE_OUTPUTS':
       return { ...state, saveOutputs: action.save }
     case 'SET_BUSY':
@@ -127,7 +165,8 @@ function reducer(state: AppState, action: AppAction): AppState {
     }
     case 'SET_RUN_RESULT':
       {
-        const plotFiles = action.result?.saved_files?.filter((f) => f.toLowerCase().endsWith('.png')) ?? []
+        const rawPlotFiles = action.result?.saved_files?.filter((f) => f.toLowerCase().endsWith('.png')) ?? []
+        const plotFiles = sortPlotFiles(rawPlotFiles)
         const hasSelectedPlot = state.selectedPlotPath && plotFiles.includes(state.selectedPlotPath)
         return {
           ...state,

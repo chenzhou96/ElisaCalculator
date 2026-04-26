@@ -22,6 +22,14 @@ class TestReaders(unittest.TestCase):
         self.assertEqual(df.columns.tolist(), ['Conc', 'GroupA', 'GroupB'])
         self.assertEqual(df.shape, (3, 3))
 
+    def test_read_table_prefers_tab_when_structure_is_consistent(self):
+        raw = "Conc\tGroupA\tGroupB\n1\t0,9\t1,1\n2\t0,7\t0,8\n3\t0,2\t0,3"
+        df, meta = read_table_from_raw_text(raw)
+
+        self.assertIsNotNone(df)
+        self.assertEqual(meta['separator'], '\t')
+        self.assertEqual(df.shape[1], 3)
+
 
 if __name__ == '__main__':
     unittest.main()

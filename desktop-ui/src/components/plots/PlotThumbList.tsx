@@ -28,7 +28,16 @@ export default function PlotThumbList() {
   const { runResult, selectedPlotPath } = useAppState()
   const dispatch = useDispatch()
 
-  const plotFiles = runResult?.saved_files?.filter((file) => file.toLowerCase().endsWith('.png')) ?? []
+  const plotFiles = (runResult?.saved_files?.filter((file) => file.toLowerCase().endsWith('.png')) ?? [])
+    .sort((a, b) => {
+      const aName = a.replace(/^.*[\\/]/, '')
+      const bName = b.replace(/^.*[\\/]/, '')
+      const aOverview = aName === 'EC50_AllGroups_Overview.png'
+      const bOverview = bName === 'EC50_AllGroups_Overview.png'
+      if (aOverview && !bOverview) return -1
+      if (!aOverview && bOverview) return 1
+      return aName.localeCompare(bName)
+    })
 
   if (plotFiles.length === 0) {
     return <div className="plot-thumb-list__empty">暂无图表。请先运行计算并勾选导出结果。</div>
@@ -38,6 +47,7 @@ export default function PlotThumbList() {
     <div className="plot-thumb-list">
       {plotFiles.map((path) => {
         const name = path.replace(/^.*[\\/]/, '')
+        const isOverview = name === 'EC50_AllGroups_Overview.png'
         const active = selectedPlotPath === path
         return (
           <button
@@ -47,6 +57,7 @@ export default function PlotThumbList() {
             title={name}
           >
             <div className="plot-thumb-list__thumb-wrap">
+              {isOverview && <span className="plot-thumb-list__badge">总览</span>}
               <PlotThumb path={path} name={name} />
             </div>
             <span className="plot-thumb-list__name">{name}</span>

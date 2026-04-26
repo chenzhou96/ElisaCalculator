@@ -72,6 +72,30 @@ class TestProcessing(unittest.TestCase):
             self.assertTrue(np.isfinite(row['EC50']))
             self.assertGreater(row['EC50'], 0)
 
+    def test_log_x_input_with_nonpositive_values_is_not_dropped(self):
+        # x values are already in log scale, so non-positive values are valid.
+        raw = (
+            'logX,GroupA,GroupB\n'
+            '-2,0.98,1.02\n'
+            '-1,0.86,0.88\n'
+            '0,0.55,0.60\n'
+            '1,0.22,0.28\n'
+            '2,0.10,0.12\n'
+        )
+        df, _ = read_table_from_raw_text(raw)
+        self.assertIsNotNone(df)
+
+        prepared, status_msg, removed_count = prepare_group_data(df, x_col_name='logX')
+        self.assertEqual(status_msg, 'Success')
+        self.assertIsNotNone(prepared)
+        self.assertEqual(removed_count, 0)
+
+        results, calc_status, _, report = calculate_ec50_global_df(df, x_col_name='logX')
+        self.assertEqual(calc_status, 'Success')
+        self.assertIsNotNone(report)
+        self.assertTrue(report.fit_success)
+        self.assertGreaterEqual(len(results), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

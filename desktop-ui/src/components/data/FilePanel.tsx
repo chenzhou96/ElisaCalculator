@@ -1,4 +1,4 @@
-import type { ChangeEvent } from 'react'
+import { useRef, type ChangeEvent } from 'react'
 import { useAppState, useDispatch, useAppActions } from '../../context/AppStateContext'
 import './FilePanel.css'
 
@@ -25,18 +25,24 @@ export default function FilePanel() {
   const { rawText, sourceLabel, selectedFileName, selectedXColumn, saveOutputs, busy, parseResult } = useAppState()
   const dispatch = useDispatch()
   const { handleParse, handleRun } = useAppActions()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function onFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
-    const { text, encoding } = await readFileWithFallback(file)
-    dispatch({ type: 'SET_RAW_TEXT', text })
-    dispatch({ type: 'SET_SOURCE_LABEL', label: `${file.name} (${encoding})` })
-    dispatch({ type: 'SET_SELECTED_FILE_NAME', name: file.name })
-    dispatch({ type: 'SET_SELECTED_X_COLUMN', column: '' })
-    dispatch({ type: 'SET_ERROR', error: '' })
-    dispatch({ type: 'SET_PARSE_RESULT', result: null })
-    dispatch({ type: 'SET_RUN_RESULT', result: null })
+    try {
+      const { text, encoding } = await readFileWithFallback(file)
+      dispatch({ type: 'SET_RAW_TEXT', text })
+      dispatch({ type: 'SET_SOURCE_LABEL', label: `${file.name} (${encoding})` })
+      dispatch({ type: 'SET_SELECTED_FILE_NAME', name: file.name })
+      dispatch({ type: 'SET_SELECTED_X_COLUMN', column: '' })
+      dispatch({ type: 'SET_ERROR', error: '' })
+      dispatch({ type: 'SET_PARSE_RESULT', result: null })
+      dispatch({ type: 'SET_RUN_RESULT', result: null })
+    } finally {
+      // Allow selecting the same file path again to retrigger onChange.
+      event.currentTarget.value = ''
+    }
   }
 
   return (
@@ -44,7 +50,7 @@ export default function FilePanel() {
       <div className="file-panel__section">
         <label className="file-panel__label">数据来源</label>
         <label className="file-panel__file-btn">
-          <input type="file" accept=".csv,.txt,.tsv" onChange={onFileChange} />
+          <input ref={fileInputRef} type="file" accept=".csv,.txt,.tsv" onChange={onFileChange} />
           加载本地文件
         </label>
         <div className="file-panel__meta">
@@ -67,6 +73,9 @@ export default function FilePanel() {
               dispatch({ type: 'SET_SELECTED_PLOT_PATH', path: '' })
               dispatch({ type: 'SET_PARSE_RESULT', result: null })
               dispatch({ type: 'SET_RUN_RESULT', result: null })
+              if (fileInputRef.current) {
+                fileInputRef.current.value = ''
+              }
             }}
             disabled={busy}
           >

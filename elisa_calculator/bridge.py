@@ -1,6 +1,7 @@
 import argparse
 import json
 import math
+import re
 import sys
 
 import numpy as np
@@ -11,6 +12,9 @@ from .services.workflow import (
     export_workflow_outputs,
     parse_workflow_input,
 )
+
+
+_INVISIBLE_CHAR_RE = re.compile(r'[\u200B-\u200D\u2060]')
 
 
 def _normalize_json_value(value):
@@ -140,12 +144,33 @@ def handle_run_request(request):
         'report': _serialize_report(calculation_result.report),
         'output_dir': export_result.output_dir if export_result is not None else None,
         'saved_files': export_result.saved_files if export_result is not None else [],
+        'export_error': export_result.error if export_result is not None else '',
+        'export_warnings': export_result.warnings if export_result is not None else [],
         'exports_skipped': bool(export_result.skipped) if export_result is not None else True,
     })
 
 
+def handle_normalize_text_request(request):
+    raw_text = request.get('raw_text')
+    if not isinstance(raw_text, str):
+        return {'ok': False, 'error': 'raw_text 必须是字符串'}
+
+    # Keep newline normalization server-side so all clients get consistent behavior.
+    normalized = raw_text.replace('\ufeff', '')
+    normalized = _INVISIBLE_CHAR_RE.sub('', normalized)
+    normalized = normalized.replace('\r\n', '\n').replace('\r', '\n')
+
+    return {
+        'ok': True,
+        'error': '',
+        'raw_text': normalized,
+    }
+
+
 def handle_request(request):
     command = request.get('command', 'run')
+    if command == 'normalize_text':
+        return handle_normalize_text_request(request)
     if command == 'parse':
         return handle_parse_request(request)
     if command == 'run':

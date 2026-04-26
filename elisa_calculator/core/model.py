@@ -3,7 +3,7 @@ import numpy as np
 
 def four_param_logistic(x, A, B, C, D):
     with np.errstate(divide='ignore', invalid='ignore', over='ignore'):
-        return D + (A - D) / (1 + (x / C) ** B)
+        return D + (A - D) / (1 + np.power(10.0, B * (x - C)))
 
 
 def global_four_param_logistic_model(x, group_indices, n_groups, A, D, *bc_flat):

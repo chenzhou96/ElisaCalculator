@@ -56,6 +56,15 @@ class TestBridge(unittest.TestCase):
         self.assertFalse(response['ok'])
         self.assertIn('不支持的命令', response['error'])
 
+    def test_normalize_text_request(self):
+        response = handle_request({
+            'command': 'normalize_text',
+            'raw_text': '\ufeffA\u200BB\r\nC\rD\n',
+        })
+
+        self.assertTrue(response['ok'])
+        self.assertEqual(response['raw_text'], 'AB\nC\nD\n')
+
 
 if __name__ == '__main__':
     unittest.main()

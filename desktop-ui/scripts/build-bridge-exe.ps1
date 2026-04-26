@@ -1,10 +1,11 @@
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = (Resolve-Path (Join-Path $projectRoot '..')).Path
 $bridgeEntry = Join-Path $PSScriptRoot 'bridge_entry.py'
 $outDir = Join-Path $projectRoot 'src-tauri\resources\bridge'
 $buildDir = Join-Path $projectRoot 'src-tauri\target\pyinstaller'
-$requirementsFile = Join-Path $projectRoot '..\requirements-build.txt'
+$requirementsFile = Join-Path $repoRoot 'requirements-build.txt'
 
 # Use the clean elisacalculator conda env if not overridden
 if ($env:BRIDGE_PYTHON_HOME) {
@@ -13,6 +14,9 @@ if ($env:BRIDGE_PYTHON_HOME) {
   $pythonHome = 'D:\Program\anaconda3\envs\elisacalculator'
 }
 $pythonExe = Join-Path $pythonHome 'python.exe'
+$pyexpatPyd = Join-Path $pythonHome 'DLLs\pyexpat.pyd'
+$expatDll = Join-Path $pythonHome 'Library\bin\expat.dll'
+$libExpatDll = Join-Path $pythonHome 'Library\bin\libexpat.dll'
 
 if (!(Test-Path $pythonExe)) {
   throw "Python not found at $pythonExe. Set BRIDGE_PYTHON_HOME env var to your conda env path."
@@ -22,7 +26,18 @@ if (!(Test-Path $bridgeEntry)) {
   throw "Bridge entry not found: $bridgeEntry"
 }
 
+if (!(Test-Path $pyexpatPyd)) {
+  throw "Missing pyexpat module: $pyexpatPyd"
+}
+if (!(Test-Path $expatDll)) {
+  throw "Missing expat DLL: $expatDll"
+}
+if (!(Test-Path $libExpatDll)) {
+  throw "Missing libexpat DLL: $libExpatDll"
+}
+
 Write-Host "Using Python: $pythonExe"
+Write-Host "Using repo root for PyInstaller path: $repoRoot"
 
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
@@ -44,7 +59,7 @@ if (Test-Path $bridgeExe) {
   --clean `
   --onefile `
   --name elisa_bridge `
-  --paths $projectRoot `
+  --paths $repoRoot `
   --distpath $outDir `
   --workpath $buildDir `
   --specpath $buildDir `
@@ -54,6 +69,10 @@ if (Test-Path $bridgeExe) {
   --hidden-import pandas `
   --hidden-import scipy `
   --hidden-import matplotlib `
+  --hidden-import xml.parsers.expat `
+  --add-binary "$pyexpatPyd;." `
+  --add-binary "$expatDll;." `
+  --add-binary "$libExpatDll;." `
   --exclude-module tkinter `
   --exclude-module _tkinter `
   --exclude-module pyperclip `

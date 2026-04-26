@@ -159,32 +159,54 @@ fn run_python_bridge(request: Value) -> Result<Value, String> {
   log::info!("[Rust bridge] request_json 长度: {} bytes", request_json.len());
   let mut errors = Vec::new();
 
-  for bridge_exe in bundled_bridge_candidates(&root) {
-    if !bridge_exe.exists() {
-      continue;
+  let try_system_python = |errors: &mut Vec<String>| -> Option<Value> {
+    for (executable, args) in [("python", Vec::<&str>::new()), ("py", vec!["-3"])] {
+      match run_bridge_once(executable, &args, &request_json, &root) {
+        Ok(value) => {
+          log::info!("[Rust bridge] {} 成功返回", executable);
+          return Some(value);
+        },
+        Err(err) => {
+          log::warn!("[Rust bridge] {} 失败: {}", executable, err);
+          errors.push(err);
+        },
+      }
     }
-    match run_bridge_executable(&bridge_exe, &request_json, &root) {
-      Ok(value) => {
-        log::info!("[Rust bridge] 内置桥接成功: {}", bridge_exe.display());
-        return Ok(value);
-      },
-      Err(err) => {
-        log::warn!("[Rust bridge] 内置桥接失败: {}", err);
-        errors.push(err);
-      },
-    }
-  }
+    None
+  };
 
-  for (executable, args) in [("python", Vec::<&str>::new()), ("py", vec!["-3"])] {
-    match run_bridge_once(executable, &args, &request_json, &root) {
-      Ok(value) => {
-        log::info!("[Rust bridge] {} 成功返回", executable);
-        return Ok(value);
-      },
-      Err(err) => {
-        log::warn!("[Rust bridge] {} 失败: {}", executable, err);
-        errors.push(err);
-      },
+  let try_bundled_bridge = |errors: &mut Vec<String>| -> Option<Value> {
+    for bridge_exe in bundled_bridge_candidates(&root) {
+      if !bridge_exe.exists() {
+        continue;
+      }
+      match run_bridge_executable(&bridge_exe, &request_json, &root) {
+        Ok(value) => {
+          log::info!("[Rust bridge] 内置桥接成功: {}", bridge_exe.display());
+          return Some(value);
+        },
+        Err(err) => {
+          log::warn!("[Rust bridge] 内置桥接失败: {}", err);
+          errors.push(err);
+        },
+      }
+    }
+    None
+  };
+
+  if cfg!(debug_assertions) {
+    if let Some(value) = try_system_python(&mut errors) {
+      return Ok(value);
+    }
+    if let Some(value) = try_bundled_bridge(&mut errors) {
+      return Ok(value);
+    }
+  } else {
+    if let Some(value) = try_bundled_bridge(&mut errors) {
+      return Ok(value);
+    }
+    if let Some(value) = try_system_python(&mut errors) {
+      return Ok(value);
     }
   }
 

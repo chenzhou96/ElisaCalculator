@@ -1,17 +1,42 @@
 from io import StringIO
+import re
 
 import pandas as pd
+
+
+def _token_count(line, sep):
+    if sep == r'\s+':
+        tokens = [item for item in re.split(r'\s+', line.strip()) if item]
+        return len(tokens)
+    return len(line.split(sep))
 
 
 def infer_separator(raw_text):
     sample_lines = [line for line in raw_text.splitlines() if line.strip()][:8]
     if not sample_lines:
         return ','
-    if any(',' in line for line in sample_lines):
-        return ','
-    if any('\t' in line for line in sample_lines):
-        return '\t'
-    return r'\s+'
+
+    candidates = [',', '\t', r'\s+']
+    best_sep = ','
+    best_score = float('-inf')
+
+    for sep in candidates:
+        counts = [_token_count(line, sep) for line in sample_lines]
+        if not counts or max(counts) < 2:
+            continue
+
+        avg_count = sum(counts) / len(counts)
+        spread = max(counts) - min(counts)
+        score = avg_count - (spread * 0.75)
+        if sep == r'\s+':
+            # Prefer explicit delimiters when scores are close.
+            score -= 0.1
+
+        if score > best_score:
+            best_score = score
+            best_sep = sep
+
+    return best_sep
 
 
 def build_default_columns(n_cols):

@@ -24,9 +24,17 @@ function PlotImage({ path, name }: { path: string; name: string }) {
 
 export default function PlotViewer() {
   const { runResult, selectedPlotPath } = useAppState()
-  const plotFiles = runResult?.saved_files?.filter(
+  const plotFiles = (runResult?.saved_files?.filter(
     (f) => f.toLowerCase().endsWith('.png'),
-  ) ?? []
+  ) ?? []).sort((a, b) => {
+    const aName = a.replace(/^.*[\\/]/, '')
+    const bName = b.replace(/^.*[\\/]/, '')
+    const aOverview = aName === 'EC50_AllGroups_Overview.png'
+    const bOverview = bName === 'EC50_AllGroups_Overview.png'
+    if (aOverview && !bOverview) return -1
+    if (!aOverview && bOverview) return 1
+    return aName.localeCompare(bName)
+  })
   const activePath = selectedPlotPath && plotFiles.includes(selectedPlotPath)
     ? selectedPlotPath
     : plotFiles[0]

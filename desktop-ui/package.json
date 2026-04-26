@@ -12,6 +12,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "tauri:build:bridge": "powershell -ExecutionPolicy Bypass -File ./scripts/build-bridge-exe.ps1",
+    "tauri:bridge:health": "powershell -ExecutionPolicy Bypass -File ./scripts/bridge-health-check.ps1",
     "tauri:prepare:offline-tools": "powershell -ExecutionPolicy Bypass -File ./scripts/prepare-offline-tools.ps1",
     "tauri:build:nsis:offline": "tauri build --bundles nsis",
     "tauri:build:msi:offline": "tauri build --bundles msi"

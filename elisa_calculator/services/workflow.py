@@ -35,6 +35,7 @@ class ExportStageResult:
     output_dir: Optional[str]
     saved_files: list
     skipped: bool
+    warnings: list
 
 
 @dataclass
@@ -50,6 +51,8 @@ class WorkflowResult:
     report: Optional[CalculationReport]
     output_dir: Optional[str]
     saved_files: list
+    export_error: str
+    export_warnings: list
     source_label: str
     encoding_used: Optional[str]
 
@@ -122,16 +125,44 @@ def export_workflow_outputs(
             output_dir=None,
             saved_files=[],
             skipped=True,
+            warnings=[],
         )
 
-    output_dir = output_dir_factory(source_label)
-    saved_files = output_saver(report.to_dict(), output_dir)
+    try:
+        output_dir = output_dir_factory(source_label)
+    except Exception as exc:
+        return ExportStageResult(
+            ok=True,
+            error=f'导出目录创建失败: {exc}',
+            output_dir=None,
+            saved_files=[],
+            skipped=False,
+            warnings=[f'export directory creation failed: {exc}'],
+        )
+
+    saved_files = []
+    warnings = []
+    try:
+        saver_result = output_saver(report.to_dict(), output_dir)
+        if isinstance(saver_result, dict):
+            saved_files = list(saver_result.get('saved_files', []))
+            warnings = list(saver_result.get('warnings', []))
+        elif isinstance(saver_result, tuple) and len(saver_result) == 2:
+            saved_files = list(saver_result[0] or [])
+            warnings = list(saver_result[1] or [])
+        elif isinstance(saver_result, list):
+            saved_files = saver_result
+    except Exception as exc:
+        warnings.append(f'export execution failed: {exc}')
+
+    error = warnings[0] if warnings else ''
     return ExportStageResult(
         ok=True,
-        error='',
+        error=error,
         output_dir=output_dir,
         saved_files=saved_files,
         skipped=False,
+        warnings=warnings,
     )
 
 
@@ -164,6 +195,8 @@ def run_calculation_workflow(
             report=None,
             output_dir=None,
             saved_files=[],
+            export_error='',
+            export_warnings=[],
             source_label=parse_result.source_label,
             encoding_used=parse_result.encoding_used,
         )
@@ -192,6 +225,8 @@ def run_calculation_workflow(
         report=calculation_result.report,
         output_dir=export_result.output_dir,
         saved_files=export_result.saved_files,
+        export_error=export_result.error,
+        export_warnings=export_result.warnings,
         source_label=parse_result.source_label,
         encoding_used=parse_result.encoding_used,
     )

@@ -72,5 +72,7 @@ export interface RunResponse {
   } | null
   output_dir?: string | null
   saved_files?: string[]
+  export_error?: string
+  export_warnings?: string[]
   exports_skipped?: boolean
 }

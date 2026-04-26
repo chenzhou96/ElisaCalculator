@@ -38,23 +38,36 @@ def format_results_table(results_list):
 def save_outputs(detail_obj, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     saved_files = []
+    warnings = []
 
-    summary_df = pd.DataFrame(detail_obj.get('summary_rows', []))
-    if not summary_df.empty:
-        summary_path = os.path.join(output_dir, 'EC50_Summary.csv')
-        summary_df.to_csv(summary_path, index=False, encoding='utf-8-sig')
-        saved_files.append(summary_path)
+    try:
+        summary_df = pd.DataFrame(detail_obj.get('summary_rows', []))
+        if not summary_df.empty:
+            summary_path = os.path.join(output_dir, 'EC50_Summary.csv')
+            summary_df.to_csv(summary_path, index=False, encoding='utf-8-sig')
+            saved_files.append(summary_path)
+    except Exception as exc:
+        warnings.append(f'summary export failed: {exc}')
 
     detail_rows = detail_obj.get('detailed_rows', [])
     for d in detail_rows:
-        group_name = sanitize_filename(d['group_name'])
+        group_name = sanitize_filename(d.get('group_name', 'group'))
         plot_path = os.path.join(output_dir, f'{group_name}_fit.png')
         if len(d.get('x', [])) > 0:
-            plot_single_group(d, plot_path)
-            saved_files.append(plot_path)
+            try:
+                plot_single_group(d, plot_path)
+                saved_files.append(plot_path)
+            except Exception as exc:
+                warnings.append(f'group plot export failed [{group_name}]: {exc}')
 
     overview_path = os.path.join(output_dir, 'EC50_AllGroups_Overview.png')
-    if plot_overview(detail_rows, overview_path):
-        saved_files.append(overview_path)
+    try:
+        if plot_overview(detail_rows, overview_path):
+            saved_files.append(overview_path)
+    except Exception as exc:
+        warnings.append(f'overview export failed: {exc}')
 
-    return saved_files
+    return {
+        'saved_files': saved_files,
+        'warnings': warnings,
+    }

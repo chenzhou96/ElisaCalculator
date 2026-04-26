@@ -79,7 +79,13 @@ def prepare_group_data(df, x_col_name=None, y_cols_names=None):
     if x_col_name is None:
         x_col_name = columns[0]
     if y_cols_names is None:
-        y_cols_names = columns[1:]
+        # Use all columns except the chosen x column by default.
+        y_cols_names = [col for col in columns if col != x_col_name]
+    elif isinstance(y_cols_names, (str, bytes)):
+        y_cols_names = [y_cols_names]
+
+    if not y_cols_names:
+        return None, 'no y columns available for fitting', removed_x_nonpositive_total
 
     if x_col_name not in df.columns:
         return None, f'missing x column: {x_col_name}', removed_x_nonpositive_total
@@ -97,17 +103,9 @@ def prepare_group_data(df, x_col_name=None, y_cols_names=None):
         tmp = tmp.dropna().copy()
         n_non_numeric_removed = n_input - n_after_numeric
 
-        nonpositive_mask = tmp['x'] <= 0
-        removed_nonpositive = int(nonpositive_mask.sum())
-        if removed_nonpositive > 0:
-            tmp = tmp.loc[~nonpositive_mask].copy()
-        removed_x_nonpositive_total += removed_nonpositive
-
         notes = []
         if n_non_numeric_removed > 0:
             notes.append(f'removed non-numeric/missing {n_non_numeric_removed}')
-        if removed_nonpositive > 0:
-            notes.append(f'removed non-positive concentration {removed_nonpositive}')
 
         if len(tmp) < 3:
             groups.append({
@@ -170,11 +168,11 @@ def fit_prepared_groups(prepared):
         x_grp, y_grp = g['x'], g['y']
         init_b = -1.0 if (len(y_grp) > 1 and y_grp[0] > y_grp[-1]) else 1.0
         med = np.median(x_grp)
-        init_c = med if med > 0 else 1.0
+        init_c = med if np.isfinite(med) else 0.0
         initial_params.extend([init_b, init_c])
 
     initial_params = np.array(initial_params, dtype=float)
-    lower_bounds = [-np.inf, -np.inf] + [-np.inf, 1e-12] * n_groups
+    lower_bounds = [-np.inf, -np.inf] + [-np.inf, -np.inf] * n_groups
     upper_bounds = [np.inf, np.inf] + [np.inf, np.inf] * n_groups
 
     fit_model = lambda x, A, D, *bc_flat: global_four_param_logistic_model(

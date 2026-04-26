@@ -20,9 +20,11 @@ def plot_single_group(detail_row, output_path):
     title = group_name
     if status == 'Success' and detail_row.get('params'):
         p = detail_row['params']
-        xmin = max(np.min(x), 1e-12)
-        xmax = max(np.max(x), xmin * 1.01)
-        xfit = np.geomspace(xmin, xmax, 300)
+        xmin = float(np.min(x))
+        xmax = float(np.max(x))
+        if xmax <= xmin:
+            xmax = xmin + 1.0
+        xfit = np.linspace(xmin, xmax, 300)
         yfit = four_param_logistic(xfit, p['A'], p['B'], p['C'], p['D'])
         plt.plot(xfit, yfit, linewidth=2, label='4PL Fit')
         plt.axvline(p['C'], linestyle='--', linewidth=1.2, label=f"EC50={p['C']:.4g}")
@@ -30,8 +32,7 @@ def plot_single_group(detail_row, output_path):
     else:
         title += '\n拟合未完成'
 
-    plt.xscale('log')
-    plt.xlabel('Concentration (log scale)', **font_kwargs())
+    plt.xlabel('Log Concentration', **font_kwargs())
     plt.ylabel('Response', **font_kwargs())
     plt.title(title, **font_kwargs())
     plt.legend(loc='best', fontsize=9, prop=CN_FONT_PROP)
@@ -62,9 +63,11 @@ def plot_overview(detail_rows, output_path):
 
         if d['status'] == 'Success' and d.get('params'):
             p = d['params']
-            xmin = max(np.min(x), 1e-12)
-            xmax = max(np.max(x), xmin * 1.01)
-            xfit = np.geomspace(xmin, xmax, 300)
+            xmin = float(np.min(x))
+            xmax = float(np.max(x))
+            if xmax <= xmin:
+                xmax = xmin + 1.0
+            xfit = np.linspace(xmin, xmax, 300)
             yfit = four_param_logistic(xfit, p['A'], p['B'], p['C'], p['D'])
             ax.plot(xfit, yfit, linewidth=1.8)
             ax.axvline(p['C'], linestyle='--', linewidth=1.0)
@@ -72,8 +75,7 @@ def plot_overview(detail_rows, output_path):
         else:
             title += '\n拟合未完成'
 
-        ax.set_xscale('log')
-        ax.set_xlabel('Concentration', **font_kwargs())
+        ax.set_xlabel('Log Concentration', **font_kwargs())
         ax.set_ylabel('Response', **font_kwargs())
         ax.set_title(title, **font_kwargs(size=10))
 

@@ -130,3 +130,38 @@
   word-break: break-all;
   line-height: 1.5;
 }
+
+.detail-panel__table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-panel);
+  border-radius: 4px;
+}
+
+.detail-panel__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.detail-panel__table th,
+.detail-panel__table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-panel);
+  text-align: left;
+}
+
+.detail-panel__table th {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--bg-hover);
+}
+
+.detail-panel__table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.detail-panel__table-num {
+  font-family: var(--font-mono);
+}

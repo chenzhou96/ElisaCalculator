@@ -1,4 +1,5 @@
 import { useAppState } from '../../context/AppStateContext'
+import type { SummaryRow } from '../../types/bridge'
 import './DetailPanel.css'
 
 function formatNum(value: number | null | undefined, digits = 4) {
@@ -7,9 +8,56 @@ function formatNum(value: number | null | undefined, digits = 4) {
 }
 
 export default function DetailPanel() {
-  const { runResult, selectedGroupIndex } = useAppState()
+  const { activeView, runResult, selectedGroupIndex, selectedPlotPath } = useAppState()
+  const summaryRows: SummaryRow[] = runResult?.report?.summary_rows ?? []
   const detailRows = runResult?.report?.detailed_rows ?? []
   const detail = detailRows[selectedGroupIndex] ?? null
+
+  const selectedPlotName = String(selectedPlotPath ?? '').replace(/^.*[\\/]/, '')
+  const isOverviewPlot = activeView === 'plots' && selectedPlotName === 'EC50_AllGroups_Overview.png'
+
+  if (isOverviewPlot) {
+    if (summaryRows.length === 0) {
+      return (
+        <div className="detail-panel">
+          <div className="detail-panel__empty">暂无分组汇总数据。</div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="detail-panel">
+        <div className="detail-panel__group">
+          <span className="detail-panel__name">全部分组汇总</span>
+          <span className="detail-panel__status detail-panel__status--success">Overview</span>
+        </div>
+
+        <div className="detail-panel__section">
+          <h4 className="detail-panel__heading">汇总表</h4>
+          <div className="detail-panel__table-wrap">
+            <table className="detail-panel__table">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>EC50</th>
+                  <th>斜率</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summaryRows.map((row) => (
+                  <tr key={row.Group}>
+                    <td>{row.Group}</td>
+                    <td className="detail-panel__table-num">{formatNum(row.EC50)}</td>
+                    <td className="detail-panel__table-num">{formatNum(row.Slope)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (!detail) {
     return (
