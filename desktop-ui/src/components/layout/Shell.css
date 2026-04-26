@@ -1,0 +1,41 @@
+.shell {
+  display: grid;
+  grid-template-rows: var(--titlebar-height) 1fr var(--statusbar-height);
+  grid-template-columns: var(--activitybar-width) 1fr;
+  grid-template-areas:
+    'titlebar titlebar'
+    'activity main'
+    'status   status';
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--bg-shell);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
+}
+
+.shell__titlebar {
+  grid-area: titlebar;
+}
+
+.shell__activity {
+  grid-area: activity;
+}
+
+.shell__main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.shell__center {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.shell__status {
+  grid-area: status;
+}

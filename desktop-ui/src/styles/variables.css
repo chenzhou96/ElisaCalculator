@@ -1,0 +1,69 @@
+:root {
+  /* Layout dimensions */
+  --titlebar-height: 34px;
+  --activitybar-width: 48px;
+  --sidebar-width: 280px;
+  --sidebar-min-width: 200px;
+  --sidebar-max-width: 500px;
+  --statusbar-height: 24px;
+  --bottom-panel-height: 180px;
+  --tab-height: 35px;
+
+  /* Background colors */
+  --bg-shell: #1e1e1e;
+  --bg-sidebar: #252526;
+  --bg-activity: #333333;
+  --bg-titlebar: #3c3c3c;
+  --bg-statusbar: #007acc;
+  --bg-panel: #1e1e1e;
+  --bg-hover: #2a2d2e;
+  --bg-active: #37373d;
+  --bg-selection: #264f78;
+  --bg-input: #3c3c3c;
+  --bg-tooltip: #383838;
+  --bg-tab: #2d2d2d;
+  --bg-tab-active: #1e1e1e;
+
+  /* Borders */
+  --border-panel: #3c3c3c;
+  --border-sidebar: #3c3c3c;
+  --border-tab-active: #007acc;
+  --border-focus: #007acc;
+  --border-input: #5a5a5a;
+
+  /* Text colors */
+  --text-primary: #cccccc;
+  --text-secondary: #969696;
+  --text-muted: #6a6a6a;
+  --text-accent: #75beff;
+  --text-link: #3794ff;
+  --text-error: #f48771;
+  --text-success: #89d185;
+  --text-warning: #cca700;
+  --text-statusbar: #ffffff;
+
+  /* Accent */
+  --accent-primary: #007acc;
+  --accent-secondary: #1a8ad4;
+
+  /* Activity bar */
+  --activity-inactive: #858585;
+  --activity-active: #ffffff;
+
+  /* Scrollbar */
+  --scrollbar-bg: transparent;
+  --scrollbar-thumb: #424242;
+  --scrollbar-thumb-hover: #4f4f4f;
+
+  /* Typography */
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-base: 13px;
+  --font-size-lg: 14px;
+
+  /* Animation */
+  --transition-fast: 80ms ease-out;
+  --transition-normal: 150ms ease-out;
+}

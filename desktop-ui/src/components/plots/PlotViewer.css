@@ -1,0 +1,49 @@
+.plot-viewer__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  padding: 32px;
+}
+
+.plot-viewer {
+  height: 100%;
+  overflow: auto;
+  padding: 16px;
+}
+
+.plot-viewer__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+}
+
+.plot-viewer__card {
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-panel);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.plot-viewer__card-header {
+  padding: 8px 12px;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-panel);
+  background: var(--bg-tab);
+}
+
+.plot-viewer__card-body {
+  padding: 12px;
+}
+
+.plot-viewer__img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 4px;
+}

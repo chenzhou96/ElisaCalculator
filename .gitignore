@@ -1,5 +1,8 @@
 *.vscode*
 *_pycache__*
+*pytest_cache*
+*.claude*
+
 desktop-ui\node_modules\
 desktop-ui\dist\
 desktop-ui\dist-ssr\

@@ -1,0 +1,132 @@
+.detail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.detail-panel__empty {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  padding-top: 32px;
+  font-style: italic;
+}
+
+.detail-panel__group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-panel);
+}
+
+.detail-panel__name {
+  font-weight: 600;
+  font-size: var(--font-size-lg);
+  color: var(--text-primary);
+}
+
+.detail-panel__status {
+  font-size: var(--font-size-xs);
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+
+.detail-panel__status--success {
+  color: var(--text-success);
+  background: rgba(137, 209, 133, 0.15);
+}
+
+.detail-panel__status--skipped {
+  color: var(--text-muted);
+  background: rgba(106, 106, 106, 0.15);
+}
+
+.detail-panel__status--warn {
+  color: var(--text-warning);
+  background: rgba(204, 167, 0, 0.15);
+}
+
+.detail-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detail-panel__heading {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.detail-panel__params {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-panel__param {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 6px;
+  border-radius: 3px;
+  font-size: var(--font-size-sm);
+}
+
+.detail-panel__param:hover {
+  background: var(--bg-hover);
+}
+
+.detail-panel__param-label {
+  color: var(--text-secondary);
+}
+
+.detail-panel__param-value {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+}
+
+.detail-panel__warnings {
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--font-size-sm);
+  color: var(--text-warning);
+  line-height: 1.6;
+}
+
+.detail-panel__none {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.detail-panel__data {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-panel__data-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.detail-panel__data-label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 40px;
+  flex-shrink: 0;
+}
+
+.detail-panel__data-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  word-break: break-all;
+  line-height: 1.5;
+}

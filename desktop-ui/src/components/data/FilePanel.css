@@ -1,0 +1,139 @@
+.file-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.file-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-panel__section--bottom {
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-panel);
+}
+
+.file-panel__label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.file-panel__file-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border: 1px solid var(--border-input);
+  border-radius: 4px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.file-panel__file-btn:hover {
+  background: var(--bg-hover);
+}
+
+.file-panel__file-btn input {
+  display: none;
+}
+
+.file-panel__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.file-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.file-panel__btn {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 4px;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.file-panel__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.file-panel__btn--reset,
+.file-panel__btn--clear {
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+
+.file-panel__btn--reset:hover,
+.file-panel__btn--clear:hover {
+  background: var(--bg-hover);
+}
+
+.file-panel__btn--parse {
+  background: var(--bg-input);
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.file-panel__btn--parse:hover {
+  background: var(--bg-hover);
+}
+
+.file-panel__btn--run {
+  background: var(--accent-primary);
+  color: #fff;
+  flex: 1;
+}
+
+.file-panel__btn--run:hover {
+  background: var(--accent-secondary);
+}
+
+.file-panel__info {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.file-panel__columns {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-primary);
+  line-height: 1.7;
+}
+
+.file-panel__column-item {
+  word-break: break-all;
+}
+
+.file-panel__hint {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.file-panel__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.file-panel__toggle input {
+  accent-color: var(--accent-primary);
+}
