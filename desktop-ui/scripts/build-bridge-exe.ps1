@@ -58,6 +58,7 @@ if (Test-Path $bridgeExe) {
   --noconfirm `
   --clean `
   --onefile `
+  --windowed `
   --name elisa_bridge `
   --paths $repoRoot `
   --distpath $outDir `
@@ -100,6 +101,12 @@ if (Test-Path $bridgeExe) {
   --exclude-module lxml `
   --exclude-module rich `
   --exclude-module click `
+  --exclude-module pytest `
+  --exclude-module setuptools `
+  --exclude-module wheel `
+  --exclude-module pip `
+  --exclude-module Cython `
+  --exclude-module docutils `
   $bridgeEntry
 
 if (!(Test-Path $bridgeExe)) {

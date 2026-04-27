@@ -8,6 +8,12 @@ use std::{
   process::{Command, Stdio},
 };
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+/// CREATE_NO_WINDOW — 防止子进程弹出命令行窗口
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 fn project_root() -> Result<PathBuf, String> {
   if let Ok(value) = env::var("ELISA_PROJECT_ROOT") {
     let candidate = PathBuf::from(value);
@@ -62,16 +68,21 @@ fn run_bridge_once(
   request_json: &str,
   root: &Path,
 ) -> Result<Value, String> {
-  let mut child = Command::new(executable)
-    .args(extra_args)
+  let mut cmd = Command::new(executable);
+  cmd.args(extra_args)
     .arg("-m")
     .arg("elisa_calculator.bridge")
     .current_dir(root)
     .env("PYTHONIOENCODING", "utf-8")
+    .env("PYTHONUTF8", "1")
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .spawn()
+    .stderr(Stdio::piped());
+
+  #[cfg(windows)]
+  cmd.creation_flags(CREATE_NO_WINDOW);
+
+  let mut child = cmd.spawn()
     .map_err(|err| match err.kind() {
       ErrorKind::NotFound => format!("{executable} 未找到"),
       _ => format!("无法启动 {executable}: {err}"),
@@ -129,13 +140,18 @@ fn bundled_bridge_candidates(root: &Path) -> Vec<PathBuf> {
 }
 
 fn run_bridge_executable(executable: &Path, request_json: &str, root: &Path) -> Result<Value, String> {
-  let mut child = Command::new(executable)
-    .current_dir(root)
+  let mut cmd = Command::new(executable);
+  cmd.current_dir(root)
     .env("PYTHONIOENCODING", "utf-8")
+    .env("PYTHONUTF8", "1")
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .spawn()
+    .stderr(Stdio::piped());
+
+  #[cfg(windows)]
+  cmd.creation_flags(CREATE_NO_WINDOW);
+
+  let mut child = cmd.spawn()
     .map_err(|err| format!("无法启动内置桥接可执行文件 {}: {}", executable.display(), err))?;
 
   if let Some(stdin) = child.stdin.as_mut() {

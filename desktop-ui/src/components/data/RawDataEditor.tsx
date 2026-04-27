@@ -1,43 +1,26 @@
 import { useAppState, useDispatch } from '../../context/AppStateContext'
-import { callBridge } from '../../hooks/useBridge'
 import './RawDataEditor.css'
 
-function stripInvisibleChars(text: string) {
+function normalizeClipboardText(text: string) {
   return text
-    .replace(/\uFEFF/g, '')
-    .replace(/[\u200B-\u200D\u2060]/g, '')
-}
-
-async function normalizePastedText(text: string) {
-  const cleaned = stripInvisibleChars(text)
-  try {
-    const response = await callBridge<{ ok: boolean; raw_text?: string }>(
-      {
-        command: 'normalize_text',
-        raw_text: cleaned,
-      },
-    )
-    if (response?.ok && typeof response.raw_text === 'string') {
-      return response.raw_text
-    }
-    return cleaned
-  } catch {
-    return cleaned
-  }
+    .replace(/﻿/g, '')
+    .replace(/[​-‍⁠]/g, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
 }
 
 export default function RawDataEditor() {
   const { rawText, busy } = useAppState()
   const dispatch = useDispatch()
 
-  async function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+  function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
     const plainText = event.clipboardData.getData('text/plain')
     if (!plainText) {
       return
     }
 
     event.preventDefault()
-    const normalized = await normalizePastedText(plainText)
+    const normalized = normalizeClipboardText(plainText)
     const target = event.currentTarget
     const start = target.selectionStart ?? rawText.length
     const end = target.selectionEnd ?? rawText.length

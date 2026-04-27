@@ -28,7 +28,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "useLocalToolsDir": true,
     "resources": [
       "../../elisa_calculator",
@@ -41,6 +41,15 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "displayLanguageSelector": false,
+        "compression": "lzma",
+        "startMenuFolder": "ELISA Calculator"
+      }
+    }
   }
 }

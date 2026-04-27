@@ -47,6 +47,9 @@ def _load_request_payload(request):
     source_label = request.get('source_label') or 'Paste'
     raw_text = request.get('raw_text')
     if isinstance(raw_text, str) and raw_text.strip():
+        raw_text = raw_text.replace('﻿', '')
+        raw_text = _INVISIBLE_CHAR_RE.sub('', raw_text)
+        raw_text = raw_text.replace('\r\n', '\n').replace('\r', '\n')
         return raw_text, source_label, request.get('encoding_used'), ''
 
     file_path = request.get('file_path')
