@@ -2,7 +2,7 @@ import json
 import os
 import unittest
 
-from elisa_calculator.bridge import handle_request
+from elisa_calculator.bridge import handle_request, _serialize_response_bytes
 
 
 class TestBridge(unittest.TestCase):
@@ -64,6 +64,22 @@ class TestBridge(unittest.TestCase):
 
         self.assertTrue(response['ok'])
         self.assertEqual(response['raw_text'], 'AB\nC\nD\n')
+
+    def test_response_bytes_are_utf8_encoded(self):
+        payload = {
+            'ok': True,
+            'meta': {
+                'columns': ['浓度', 'Rabbit-染色'],
+                'header_note': '检测到表头，已按用户原始列名处理。',
+            },
+        }
+
+        encoded = _serialize_response_bytes(payload)
+
+        self.assertTrue(encoded.endswith(b'\n'))
+        decoded = encoded.decode('utf-8')
+        self.assertIn('浓度', decoded)
+        self.assertIn('检测到表头', decoded)
 
 
 if __name__ == '__main__':

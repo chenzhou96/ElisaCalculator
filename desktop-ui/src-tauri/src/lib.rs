@@ -14,11 +14,11 @@ use std::os::windows::process::CommandExt;
 /// CREATE_NO_WINDOW — 防止子进程弹出命令行窗口
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-fn project_root() -> Result<PathBuf, String> {
+fn source_project_root() -> Option<PathBuf> {
   if let Ok(value) = env::var("ELISA_PROJECT_ROOT") {
     let candidate = PathBuf::from(value);
     if candidate.join("elisa_calculator").exists() {
-      return Ok(candidate);
+      return Some(candidate);
     }
   }
 
@@ -32,17 +32,44 @@ fn project_root() -> Result<PathBuf, String> {
 
       for candidate in candidates {
         if candidate.join("elisa_calculator").exists() {
-          return Ok(candidate);
+          return Some(candidate);
         }
       }
     }
   }
 
-  Path::new(env!("CARGO_MANIFEST_DIR"))
+  let manifest_root = Path::new(env!("CARGO_MANIFEST_DIR"))
     .parent()
     .and_then(Path::parent)
-    .map(Path::to_path_buf)
-    .ok_or_else(|| "无法定位项目根目录".to_string())
+    .map(Path::to_path_buf)?;
+
+  if manifest_root.join("elisa_calculator").exists() {
+    return Some(manifest_root);
+  }
+
+  None
+}
+
+fn bundled_bridge_base_dirs() -> Vec<PathBuf> {
+  let mut candidates = Vec::new();
+
+  if let Ok(exe_path) = env::current_exe() {
+    if let Some(exe_dir) = exe_path.parent() {
+      candidates.push(exe_dir.join("resources").join("bridge"));
+      candidates.push(exe_dir.join("resources"));
+      candidates.push(exe_dir.join("../Resources/bridge"));
+      candidates.push(exe_dir.join("../Resources"));
+      candidates.push(exe_dir.join("bridge"));
+      candidates.push(exe_dir.to_path_buf());
+    }
+  }
+
+  if let Some(source_root) = source_project_root() {
+    candidates.push(source_root.join("bridge"));
+    candidates.push(source_root);
+  }
+
+  unique_paths(candidates)
 }
 
 fn parse_bridge_output(output: std::process::Output, command_name: &str) -> Result<Value, String> {
@@ -113,35 +140,32 @@ fn unique_paths(items: Vec<PathBuf>) -> Vec<PathBuf> {
   result
 }
 
-fn bundled_bridge_candidates(root: &Path) -> Vec<PathBuf> {
+fn bundled_bridge_candidates() -> Vec<PathBuf> {
   let exe_name = if cfg!(windows) {
     "elisa_bridge.exe"
   } else {
     "elisa_bridge"
   };
 
-  let mut candidates = vec![
-    root.join("bridge").join(exe_name),
-    root.join(exe_name),
-  ];
-
-  if let Ok(exe_path) = env::current_exe() {
-    if let Some(exe_dir) = exe_path.parent() {
-      candidates.push(exe_dir.join("resources").join("bridge").join(exe_name));
-      candidates.push(exe_dir.join("resources").join(exe_name));
-      candidates.push(exe_dir.join("../Resources").join("bridge").join(exe_name));
-      candidates.push(exe_dir.join("../Resources").join(exe_name));
-      candidates.push(exe_dir.join("bridge").join(exe_name));
-      candidates.push(exe_dir.join(exe_name));
-    }
-  }
-
-  unique_paths(candidates)
+  unique_paths(
+    bundled_bridge_base_dirs()
+      .into_iter()
+      .map(|dir| dir.join(exe_name))
+      .collect(),
+  )
 }
 
-fn run_bridge_executable(executable: &Path, request_json: &str, root: &Path) -> Result<Value, String> {
+fn run_bridge_executable(executable: &Path, request_json: &str) -> Result<Value, String> {
+  let work_dir = executable
+    .parent()
+    .ok_or_else(|| format!("内置桥接路径没有父目录: {}", executable.display()))?;
+  log::info!(
+    "[Rust bridge] 启动内置桥接: executable={}, work_dir={}",
+    executable.display(),
+    work_dir.display()
+  );
   let mut cmd = Command::new(executable);
-  cmd.current_dir(root)
+  cmd.current_dir(work_dir)
     .env("PYTHONIOENCODING", "utf-8")
     .env("PYTHONUTF8", "1")
     .stdin(Stdio::piped())
@@ -152,7 +176,14 @@ fn run_bridge_executable(executable: &Path, request_json: &str, root: &Path) -> 
   cmd.creation_flags(CREATE_NO_WINDOW);
 
   let mut child = cmd.spawn()
-    .map_err(|err| format!("无法启动内置桥接可执行文件 {}: {}", executable.display(), err))?;
+    .map_err(|err| {
+      format!(
+        "无法启动内置桥接可执行文件 {} (work_dir={}): {}",
+        executable.display(),
+        work_dir.display(),
+        err
+      )
+    })?;
 
   if let Some(stdin) = child.stdin.as_mut() {
     stdin
@@ -170,12 +201,22 @@ fn run_bridge_executable(executable: &Path, request_json: &str, root: &Path) -> 
 fn run_python_bridge(request: Value) -> Result<Value, String> {
   let request_json =
     serde_json::to_string(&request).map_err(|err| format!("序列化请求失败: {err}"))?;
-  let root = project_root()?;
-  log::info!("[Rust bridge] project_root: {:?}", root);
+  let source_root = source_project_root();
+  log::info!("[Rust bridge] source_project_root: {:?}", source_root);
+  if let Ok(exe_path) = env::current_exe() {
+    log::info!("[Rust bridge] current_exe: {}", exe_path.display());
+  }
   log::info!("[Rust bridge] request_json 长度: {} bytes", request_json.len());
   let mut errors = Vec::new();
 
   let try_system_python = |errors: &mut Vec<String>| -> Option<Value> {
+    let Some(root) = source_root.as_ref() else {
+      let message = "系统 Python 模式不可用: 未找到源码目录".to_string();
+      log::warn!("[Rust bridge] {}", message);
+      errors.push(message);
+      return None;
+    };
+
     for (executable, args) in [("python", Vec::<&str>::new()), ("py", vec!["-3"])] {
       match run_bridge_once(executable, &args, &request_json, &root) {
         Ok(value) => {
@@ -192,11 +233,13 @@ fn run_python_bridge(request: Value) -> Result<Value, String> {
   };
 
   let try_bundled_bridge = |errors: &mut Vec<String>| -> Option<Value> {
-    for bridge_exe in bundled_bridge_candidates(&root) {
+    for bridge_exe in bundled_bridge_candidates() {
+      log::info!("[Rust bridge] 检查内置桥接候选: {}", bridge_exe.display());
       if !bridge_exe.exists() {
+        log::info!("[Rust bridge] 跳过不存在的候选: {}", bridge_exe.display());
         continue;
       }
-      match run_bridge_executable(&bridge_exe, &request_json, &root) {
+      match run_bridge_executable(&bridge_exe, &request_json) {
         Ok(value) => {
           log::info!("[Rust bridge] 内置桥接成功: {}", bridge_exe.display());
           return Some(value);

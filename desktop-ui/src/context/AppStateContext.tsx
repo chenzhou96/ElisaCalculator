@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useCallback, type Dispatch, type ReactNode } from 'react'
+import { createContext, useContext, useReducer, useCallback, useRef, type Dispatch, type ReactNode } from 'react'
 import type { ViewType, TabType } from '../types/layout'
 import type { ParseResponse, RunResponse } from '../types/bridge'
 import { callBridge } from '../hooks/useBridge'
@@ -223,6 +223,7 @@ export function useDispatch() {
 export function useAppActions() {
   const state = useAppState()
   const dispatch = useDispatch()
+  const inFlightActionRef = useRef<'parse' | 'run' | null>(null)
 
   const appendLog = useCallback(
     (line: string) => dispatch({ type: 'APPEND_LOG', line }),
@@ -230,6 +231,12 @@ export function useAppActions() {
   )
 
   const handleParse = useCallback(async () => {
+    if (inFlightActionRef.current) {
+      appendLog(`[parse] 已忽略重复操作: ${inFlightActionRef.current} 仍在执行`)
+      return
+    }
+
+    inFlightActionRef.current = 'parse'
     dispatch({ type: 'SET_BUSY', busy: true })
     dispatch({ type: 'SET_ERROR', error: '' })
     dispatch({ type: 'SET_RUN_RESULT', result: null })
@@ -255,11 +262,18 @@ export function useAppActions() {
       dispatch({ type: 'SET_ERROR', error: msg })
       appendLog(`[parse] 桥接错误: ${msg}`)
     } finally {
+      inFlightActionRef.current = null
       dispatch({ type: 'SET_BUSY', busy: false })
     }
   }, [state.rawText, state.sourceLabel, dispatch, appendLog])
 
   const handleRun = useCallback(async () => {
+    if (inFlightActionRef.current) {
+      appendLog(`[run] 已忽略重复操作: ${inFlightActionRef.current} 仍在执行`)
+      return
+    }
+
+    inFlightActionRef.current = 'run'
     dispatch({ type: 'SET_BUSY', busy: true })
     dispatch({ type: 'SET_ERROR', error: '' })
     dispatch({ type: 'CLEAR_LOG' })
@@ -308,6 +322,7 @@ export function useAppActions() {
       dispatch({ type: 'SET_ERROR', error: msg })
       appendLog(`[run] 桥接错误: ${msg}`)
     } finally {
+      inFlightActionRef.current = null
       dispatch({ type: 'SET_BUSY', busy: false })
     }
   }, [state.rawText, state.sourceLabel, state.selectedXColumn, state.saveOutputs, state.parseResult, dispatch, appendLog])

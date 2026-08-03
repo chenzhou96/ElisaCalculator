@@ -31,6 +31,11 @@ def _normalize_json_value(value):
     return value
 
 
+def _serialize_response_bytes(payload):
+    normalized = _normalize_json_value(payload)
+    return (json.dumps(normalized, ensure_ascii=False) + '\n').encode('utf-8')
+
+
 def _serialize_report(report):
     if report is None:
         return None
@@ -205,8 +210,8 @@ def main(argv=None):
     except Exception as exc:
         response = {'ok': False, 'error': f'桥接调用失败: {exc}'}
 
-    json.dump(_normalize_json_value(response), sys.stdout, ensure_ascii=False)
-    sys.stdout.write('\n')
+    sys.stdout.buffer.write(_serialize_response_bytes(response))
+    sys.stdout.buffer.flush()
     return 0
 
 
