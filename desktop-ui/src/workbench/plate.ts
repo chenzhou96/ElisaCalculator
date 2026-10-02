@@ -196,7 +196,7 @@ export function compilePlate(plate: PlateDocument, options: AnalysisOptions): Co
     positions.set(w.id, {column: column.name, row: doses.indexOf(w.dose) + 1});
   }
   mappedOptions.replicate_groups = Object.fromEntries(groups.map(group => [group, columns.filter(c => c.group === group).map(c => c.name)]));
-  const rawText = ["Dose\t" + columns.map(c => c.name).join("\t"), ...doses.map(dose => [plate.basis === "relative" ? 1 - Math.log2(dose) : dose, ...columns.map(c => c.values.get(dose) ?? "")].join("\t"))].join("\n");
+  const rawText = ["Dose\t" + columns.map(c => c.name.includes('"') ? '"' + c.name.replace(/"/g, '""') + '"' : c.name).join("\t"), ...doses.map(dose => [plate.basis === "relative" ? 1 - Math.log2(dose) : dose, ...columns.map(c => c.values.get(dose) ?? "")].join("\t"))].join("\n");
   const mapping: PlateMapping = {schema: "elisa-plate-mapping/1", plate, coordinateEncoding: plate.basis === "relative" ? "Canonical X = 1 - log2(relative stock fraction); engine uses relative dilution_step, factor 2, first_step 1. This encoding preserves every confirmed dose and group gradient." : "Canonical X is the confirmed absolute dose in the explicit plate unit; stock concentration is unspecified, so original-stock X is unavailable.", blankScope: plate.blankMode === "none" ? "不扣空白" : plate.blankMode === "global" ? "全板有效空白均值；所有拟合组和未知样品各扣一次" : "每组仅使用同名空白均值；缺组空白阻止计算，不回退", replicatePolicy: plate.replicateMode === "individual" ? "逐孔拟合，每个有效观测等权；技术复孔不视为独立实验" : "每组每剂量均值拟合，剂量均值等权；不按复孔数加权", rows: plate.wells.map(w => {
     const value = numericOD(w.raw), included = curveKinds.includes(w.kind) || w.kind === "unknown", blank = included ? blankCache.get(w.group) ?? 0 : 0;
     const processedOD = value === null || !included ? null : value - blank;

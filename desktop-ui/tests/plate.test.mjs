@@ -100,3 +100,27 @@ test('malformed persisted coordinates/types and prototype kind names are rejecte
  }
  assert.deepEqual(validatePlate(createPlate()).wells.map(w=>w.id),WELL_IDS)
 })
+
+test('each input view preserves its own reference, workflow and fit conventions across examples, undo and restore',()=>{
+ let s=reducer(structuredClone(initialWorkspace),{type:'plate-example',workflow:'comparative'})
+ s=reducer(s,{type:'options',patch:{reference_group:'Sample_4X',reference_assigned_value:7}})
+ const raw=od(s.plate,'A1').raw;s=reducer(s,{type:'view',view:'table'})
+ s=reducer(s,{type:'options',patch:{reference_group:'DifferentTableReference',reference_assigned_value:3,fit_mode:'independent'}})
+ s=reducer(s,{type:'view',view:'plate'});assert.equal(s.options.reference_group,'Sample_4X');assert.equal(s.options.reference_assigned_value,7);assert.equal(s.options.fit_mode,'shared');assert.equal(od(s.plate,'A1').raw,raw)
+ s=reducer(s,{type:'options',patch:{reference_assigned_value:8}});s=reducer(s,{type:'plate-undo'});assert.equal(s.options.reference_assigned_value,7)
+ const restored=parseRecord(serializeRecord(s));assert.equal(restored.viewOptions.table.reference_group,'DifferentTableReference')
+ s={...s,...restored};s=reducer(s,{type:'view',view:'table'});assert.equal(s.options.reference_assigned_value,3);assert.equal(s.options.fit_mode,'independent')
+ s=reducer(s,{type:'example',workflow:'standard_curve'});s=reducer(s,{type:'view',view:'plate'});assert.equal(s.options.reference_group,'Sample_4X');assert.equal(s.options.workflow,'comparative')
+ const legacy=JSON.parse(serializeRecord(s));delete legacy.inputs.viewOptions
+ const old=parseRecord(JSON.stringify(legacy));assert.equal(old.options.reference_assigned_value,7);assert.equal(old.viewOptions.table.reference_assigned_value,defaultOptions.reference_assigned_value)
+ const bad=JSON.parse(serializeRecord(s));bad.inputs.viewOptions.table.workflow='bad';assert.throws(()=>parseRecord(JSON.stringify(bad)))
+})
+
+test('plate parse preserves a non-first table X column for later table parsing and portable restoration',()=>{
+ let s=reducer(structuredClone(initialWorkspace),{type:'plate-example',workflow:'comparative'})
+ s=reducer(s,{type:'view',view:'table'});s={...s,xColumn:'CustomDose',rawText:'Reference,CustomDose\n2,1'}
+ s=reducer(s,{type:'view',view:'plate'});s=reducer(s,{type:'begin',busy:'parse',request:1})
+ s=reducer(s,{type:'parsed',request:1,version:s.version,response:{ok:true,meta:{columns:['Dose','Reference · 列 1 · 复孔 1']}}})
+ assert.equal(s.xColumn,'CustomDose');assert.equal(parseRecord(serializeRecord(s)).xColumn,'CustomDose')
+ s=reducer(s,{type:'view',view:'table'});s=reducer(s,{type:'begin',busy:'parse',request:2});s=reducer(s,{type:'parsed',request:2,version:s.version,response:{ok:true,meta:{columns:['Reference','CustomDose']}}});assert.equal(s.xColumn,'CustomDose')
+})

@@ -40,6 +40,7 @@ export interface Workspace {
   headerMode: HeaderMode;
   xColumn: string;
   options: AnalysisOptions;
+  viewOptions: Record<"plate" | "table", AnalysisOptions>;
   replicateText: string;
   unknowns: UnknownInput[];
   saveOutputs: boolean;
@@ -62,6 +63,7 @@ export const initialWorkspace: Workspace = {
   headerMode: "auto",
   xColumn: "",
   options: defaultOptions,
+  viewOptions: {plate: {...defaultOptions}, table: {...defaultOptions}},
   replicateText: "",
   unknowns: [{ id: "sample-1", sample: "样品 1", od: "", dilution: "1" }],
   saveOutputs: false,
@@ -111,7 +113,7 @@ export type Action =
         | "replicateText"
         | "unknowns"
         | "saveOutputs"
-      > & Partial<Pick<Workspace, "plate" | "inputView">>;
+      > & Partial<Pick<Workspace, "plate" | "inputView" | "viewOptions">>;
     }
   | { type: "begin"; request: number; busy: Workspace["busy"] }
   | {
@@ -147,10 +149,13 @@ function current(
 ) {
   return state.request === action.request && state.version === action.version;
 }
+function savedViewOptions(state: Workspace) {
+  return {...state.viewOptions, [state.inputView]: state.options};
+}
 export function reducer(state: Workspace, action: Action): Workspace {
   switch (action.type) {
     case "view":
-      return state.inputView === action.view ? state : {...changed(state, true), inputView: action.view, page: "data", status: "已切换输入视图；两份原始输入分别保留，请重新检查"};
+      return state.inputView === action.view ? state : {...changed(state, true), inputView: action.view, viewOptions: savedViewOptions(state), options: state.viewOptions[action.view], page: "data", status: "已切换输入视图；两份原始输入分别保留，请重新检查"};
     case "plate-selection":
       return {...state, plate: {...state.plate, selected: action.selected, anchor: action.anchor}};
     case "plate":
@@ -164,7 +169,7 @@ export function reducer(state: Workspace, action: Action): Workspace {
       return {...changed(state, true), plate: state.plateFuture[0].plate, options: state.plateFuture[0].options, platePast: [...state.platePast.slice(-39), {plate: state.plate, options: state.options}], plateFuture: state.plateFuture.slice(1)};
     }
     case "plate-example":
-      return {...changed(state, true), inputView: "plate", plate: plateExample(action.workflow), platePast: [...state.platePast.slice(-39), {plate: state.plate, options: state.options}], plateFuture: [], options: {...defaultOptions, workflow: action.workflow, reference_group: "Reference", reference_assigned_value: 10, standard_group: "Standard", fit_mode: action.workflow === "comparative" ? "shared" : "independent"}, status: "合成孔板示例已载入；请检查映射"};
+      return {...changed(state, true), inputView: "plate", viewOptions: savedViewOptions(state), plate: plateExample(action.workflow), platePast: [...state.platePast.slice(-39), {plate: state.plate, options: state.options}], plateFuture: [], options: {...defaultOptions, workflow: action.workflow, reference_group: "Reference", reference_assigned_value: 10, standard_group: "Standard", fit_mode: action.workflow === "comparative" ? "shared" : "independent"}, status: "合成孔板示例已载入；请检查映射"};
     case "page":
       return { ...state, page: action.page };
     case "input":
@@ -188,6 +193,7 @@ export function reducer(state: Workspace, action: Action): Workspace {
             ...action.workspace,
             inputView: action.workspace.inputView ?? "table",
             plate: action.workspace.plate ?? createPlate(),
+            viewOptions: action.workspace.viewOptions ?? {plate: (action.workspace.inputView === "plate" ? action.workspace.options : {...defaultOptions}), table: (action.workspace.inputView !== "plate" ? action.workspace.options : {...defaultOptions})},
             platePast: [],
             plateFuture: [],
             version: state.version + 1,
@@ -201,6 +207,7 @@ export function reducer(state: Workspace, action: Action): Workspace {
       return {
         ...initialWorkspace,
         inputView: "table",
+        viewOptions: savedViewOptions(state),
         plate: state.plate,
         platePast: state.platePast,
         plateFuture: state.plateFuture,
@@ -250,6 +257,8 @@ export function reducer(state: Workspace, action: Action): Workspace {
         ? {
             ...changed(state, true),
             inputView: "table",
+            viewOptions: savedViewOptions(state),
+            options: state.inputView === "table" ? state.options : state.viewOptions.table,
             rawText: action.text,
             source: action.source,
             xColumn: "",
@@ -261,7 +270,7 @@ export function reducer(state: Workspace, action: Action): Workspace {
         ? {
             ...state,
             parsed: action.response,
-            xColumn: action.response.meta?.columns?.includes(state.xColumn)
+            xColumn: state.inputView === "plate" ? state.xColumn : action.response.meta?.columns?.includes(state.xColumn)
               ? state.xColumn
               : (action.response.meta?.columns?.[0] ?? ""),
             error: action.response.ok

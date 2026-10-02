@@ -1,66 +1,17 @@
 import { defaultOptions, type Workspace } from "./model.ts";
 import type { AnalysisOptions, UnknownInput } from "./types";
 import { createPlate, validatePlate } from "./plate.ts";
-export const RECORD_SCHEMA = "elisa-analysis/1";
-export function serializeRecord(state: Workspace) {
-  return JSON.stringify(
-    {
-      schema: RECORD_SCHEMA,
-      app_version: "0.2.0",
-      saved_at: new Date().toISOString(),
-      inputs: {
-        inputView: state.inputView,
-        plate: state.plate,
-        rawText: state.rawText,
-        source: state.source,
-        headerMode: state.headerMode,
-        xColumn: state.xColumn,
-        options: state.options,
-        replicateText: state.replicateText,
-        unknowns: state.unknowns,
-        saveOutputs: state.saveOutputs,
-      },
-      result: state.result,
-    },
-    null,
-    2,
-  );
-}
-/** Import only validated inputs. Stored results never become current without re-running Python. */
-export function parseRecord(
-  text: string,
-): Pick<
-  Workspace,
-  | "rawText"
-  | "source"
-  | "headerMode"
-  | "xColumn"
-  | "options"
-  | "replicateText"
-  | "unknowns"
-  | "saveOutputs"
-  | "plate"
-  | "inputView"
-> {
-  const record = JSON.parse(text);
+function parseOptions(value: unknown): AnalysisOptions {
   if (
-    record?.schema !== RECORD_SCHEMA ||
-    !record.inputs ||
-    typeof record.inputs.rawText !== "string"
-  )
-    throw new Error("这不是兼容的 ELISA 分析记录（elisa-analysis/1）");
-  const input = record.inputs;
-  if (input.inputView != null && !["plate", "table"].includes(input.inputView)) throw new Error("记录中的输入视图无效");
-  const plate = input.plate == null ? createPlate() : validatePlate(input.plate);
-  if (
-    input.options != null &&
-    (typeof input.options !== "object" || Array.isArray(input.options))
+    value != null &&
+    (typeof value !== "object" || Array.isArray(value))
   )
     throw new Error("记录中的分析选项无效");
+  const input = value as Partial<AnalysisOptions> | null | undefined;
   const opts: AnalysisOptions = { ...defaultOptions };
   for (const key of Object.keys(defaultOptions) as (keyof AnalysisOptions)[])
-    if (input.options?.[key] !== undefined)
-      Object.assign(opts, { [key]: input.options[key] });
+    if (input?.[key] !== undefined)
+      Object.assign(opts, { [key]: input![key] });
   if (
     !["comparative", "standard_curve"].includes(opts.workflow) ||
     !["dilution_step", "raw_concentration", "log_concentration"].includes(
@@ -97,6 +48,70 @@ export function parseRecord(
     (opts.standard_group !== null && typeof opts.standard_group !== "string")
   )
     throw new Error("记录中的单位或参考组无效");
+  opts.replicate_groups = {};
+  opts.unknown_samples = [];
+  return opts;
+}
+export const RECORD_SCHEMA = "elisa-analysis/1";
+export function serializeRecord(state: Workspace) {
+  return JSON.stringify(
+    {
+      schema: RECORD_SCHEMA,
+      app_version: "0.2.0",
+      saved_at: new Date().toISOString(),
+      inputs: {
+        inputView: state.inputView,
+        plate: state.plate,
+        rawText: state.rawText,
+        source: state.source,
+        headerMode: state.headerMode,
+        xColumn: state.xColumn,
+        options: state.options,
+        viewOptions: {...state.viewOptions, [state.inputView]: state.options},
+        replicateText: state.replicateText,
+        unknowns: state.unknowns,
+        saveOutputs: state.saveOutputs,
+      },
+      result: state.result,
+    },
+    null,
+    2,
+  );
+}
+/** Import only validated inputs. Stored results never become current without re-running Python. */
+export function parseRecord(
+  text: string,
+): Pick<
+  Workspace,
+  | "rawText"
+  | "source"
+  | "headerMode"
+  | "xColumn"
+  | "options"
+  | "replicateText"
+  | "unknowns"
+  | "saveOutputs"
+  | "plate"
+  | "inputView"
+  | "viewOptions"
+> {
+  const record = JSON.parse(text);
+  if (
+    record?.schema !== RECORD_SCHEMA ||
+    !record.inputs ||
+    typeof record.inputs.rawText !== "string"
+  )
+    throw new Error("这不是兼容的 ELISA 分析记录（elisa-analysis/1）");
+  const input = record.inputs;
+  if (input.inputView != null && !["plate", "table"].includes(input.inputView)) throw new Error("记录中的输入视图无效");
+  const plate = input.plate == null ? createPlate() : validatePlate(input.plate);
+  const opts = parseOptions(input.options);
+  const view = input.inputView ?? "table";
+  if (input.viewOptions != null && (typeof input.viewOptions !== "object" || Array.isArray(input.viewOptions))) throw new Error("记录中的视图分析约定无效");
+  const viewOptions = input.viewOptions == null
+    ? {plate: view === "plate" ? opts : {...defaultOptions}, table: view === "table" ? opts : {...defaultOptions}}
+    : {plate: parseOptions(input.viewOptions.plate), table: parseOptions(input.viewOptions.table)};
+  viewOptions[view as "plate" | "table"] = opts;
   if (
     input.unknowns &&
     (!Array.isArray(input.unknowns) ||
@@ -113,7 +128,8 @@ export function parseRecord(
   opts.replicate_groups = {};
   opts.unknown_samples = [];
   return {
-    inputView: input.inputView ?? "table",
+    inputView: view,
+    viewOptions,
     plate,
     rawText: input.rawText,
     source: String(input.source ?? "分析记录"),

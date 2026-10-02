@@ -10,7 +10,7 @@ const repo=fileURLToPath(new URL('../../',import.meta.url))
 const options={...defaultOptions,reference_group:'Reference',reference_assigned_value:10}
 const well=(p,id)=>p.wells.find(w=>w.id===id)
 function execute(raw_text,analysis_options,plate_mapping){
- const r=spawnSync(process.env.ELISA_PYTHON||'/opt/anaconda3/bin/python',['-m','elisa_calculator.bridge'],{cwd:repo,input:JSON.stringify({command:'run',raw_text,analysis_options,plate_mapping,header_mode:'present',x_col_name:raw_text.split('\n')[0].split(/[\t,]/)[0],save_outputs:false}),encoding:'utf8',maxBuffer:32*1024*1024,env:{...process.env,MPLCONFIGDIR:'/tmp/elisa-plate-science-mpl',XDG_CACHE_HOME:'/tmp/elisa-plate-science-cache'}})
+ const r=spawnSync(process.env.ELISA_PYTHON||'python',['-m','elisa_calculator.bridge'],{cwd:repo,input:JSON.stringify({command:'run',raw_text,analysis_options,plate_mapping,header_mode:'present',x_col_name:raw_text.split('\n')[0].split(/[\t,]/)[0],save_outputs:false}),encoding:'utf8',maxBuffer:32*1024*1024,env:{...process.env,MPLCONFIGDIR:'/tmp/elisa-plate-science-mpl',XDG_CACHE_HOME:'/tmp/elisa-plate-science-cache'}})
  assert.equal(r.status,0,r.stderr);const body=JSON.parse(r.stdout);assert.equal(body.ok,true,body.error);return body.report
 }
 function run(p,o=options){const c=compilePlate(p,o);assert.equal(c.ok,true,c.errors.join('\n'));return execute(c.rawText,c.options,c.mapping)}
@@ -84,4 +84,11 @@ test('opposite directions suppress ratios; nonparallel output explicitly limits 
  const values=p.wells.filter(w=>w.group==='Sample_4X').map(w=>w.raw)
  for(const col of [3,4]){const ws=p.wells.filter(w=>w.group==='Sample_4X'&&w.id.endsWith(String(col)));for(let i=0;i<8;i++)ws[i].raw=values[7-i]}
  const opposite=run(p).summary_rows.find(r=>r.Group==='Sample_4X');assert.equal(opposite.Relative_stock_potency_X,null);assert.equal(opposite.EC50_ratio,null)
+})
+
+test('legal quoted group names survive actual TSV parse and retain reference normalization',()=>{
+ const p=plateExample('comparative');for(const w of p.wells)if(w.group==='Reference')w.group='"Reference"'
+ const c=compilePlate(p,{...options,reference_group:'"Reference"'});assert.equal(c.ok,true);assert.match(c.rawText,/""Reference""/)
+ const report=run(p,{...options,reference_group:'"Reference"'})
+ close(report.summary_rows.find(r=>r.Group==='"Reference"').Relative_stock_potency_X,10);close(report.summary_rows.find(r=>r.Group==='Sample_4X').Relative_stock_potency_X,40)
 })

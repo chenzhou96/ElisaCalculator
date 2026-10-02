@@ -36,7 +36,8 @@ async function prepareComparison(page) {
 async function screenshot(page, testInfo, name) {
   const dimensions = await page.evaluate(() => ({viewport: [innerWidth, innerHeight], document: [document.documentElement.scrollWidth, document.documentElement.scrollHeight]}))
   expect(dimensions.document[0], `${name}: page must not overflow horizontally`).toBeLessThanOrEqual(dimensions.viewport[0] + 1)
-  await page.screenshot({path: testInfo.outputPath(`${name}.png`), fullPage: false})
+  await page.evaluate(async () => { await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))) })
+  await page.screenshot({path: testInfo.outputPath(`${name}.png`), fullPage: false, animations: 'disabled'})
   await testInfo.attach(`${name}-dimensions`, {body: JSON.stringify(dimensions), contentType: 'application/json'})
 }
 
