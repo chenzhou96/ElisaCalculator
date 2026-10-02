@@ -1,5 +1,5 @@
 from .evaluator import build_group_warning_notes, compute_fit_metrics
-from .model import four_param_logistic, global_four_param_logistic_model
+from .model import four_param_logistic, global_four_param_logistic_model, inverse_four_param_logistic
 from .processing import (
     CalculationReport,
     FitParameters,
@@ -16,6 +16,7 @@ __all__ = [
     'build_calculation_report',
     'CalculationReport',
     'four_param_logistic',
+    'inverse_four_param_logistic',
     'FitParameters',
     'fit_prepared_groups',
     'GlobalFitResult',

@@ -1,5 +1,4 @@
 $ErrorActionPreference = 'Stop'
-
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $repoRoot = (Resolve-Path (Join-Path $projectRoot '..')).Path
 $bridgeEntry = Join-Path $PSScriptRoot 'bridge_entry.py'
@@ -7,111 +6,52 @@ $outDir = Join-Path $projectRoot 'src-tauri\resources\bridge'
 $buildDir = Join-Path $projectRoot 'src-tauri\target\pyinstaller'
 $requirementsFile = Join-Path $repoRoot 'requirements-build.txt'
 
-# Use the clean elisacalculator conda env if not overridden
+# Prefer an explicitly selected environment; otherwise resolve a real Python.
+# No developer-machine drive or conda directory is assumed.
 if ($env:BRIDGE_PYTHON_HOME) {
-  $pythonHome = $env:BRIDGE_PYTHON_HOME
+  $pythonExe = Join-Path $env:BRIDGE_PYTHON_HOME 'python.exe'
+} elseif (Get-Command py -ErrorAction SilentlyContinue) {
+  $pythonExe = (& py -3 -c 'import sys; print(sys.executable)').Trim()
+  if ($LASTEXITCODE -ne 0) { throw 'Python launcher failed to resolve Python 3.' }
+} elseif (Get-Command python -ErrorAction SilentlyContinue) {
+  $pythonExe = (& python -c 'import sys; print(sys.executable)').Trim()
+  if ($LASTEXITCODE -ne 0) { throw 'python failed to resolve an interpreter.' }
 } else {
-  $pythonHome = 'D:\Program\anaconda3\envs\elisacalculator'
+  throw 'Python 3 not found. Install Python or set BRIDGE_PYTHON_HOME.'
 }
-$pythonExe = Join-Path $pythonHome 'python.exe'
-$pyexpatPyd = Join-Path $pythonHome 'DLLs\pyexpat.pyd'
-$expatDll = Join-Path $pythonHome 'Library\bin\expat.dll'
-$libExpatDll = Join-Path $pythonHome 'Library\bin\libexpat.dll'
-
-if (!(Test-Path $pythonExe)) {
-  throw "Python not found at $pythonExe. Set BRIDGE_PYTHON_HOME env var to your conda env path."
-}
-
-if (!(Test-Path $bridgeEntry)) {
-  throw "Bridge entry not found: $bridgeEntry"
-}
-
-if (!(Test-Path $pyexpatPyd)) {
-  throw "Missing pyexpat module: $pyexpatPyd"
-}
-if (!(Test-Path $expatDll)) {
-  throw "Missing expat DLL: $expatDll"
-}
-if (!(Test-Path $libExpatDll)) {
-  throw "Missing libexpat DLL: $libExpatDll"
-}
+if (!(Test-Path $pythonExe)) { throw "Python not found: $pythonExe" }
+if (!(Test-Path $bridgeEntry)) { throw "Bridge entry not found: $bridgeEntry" }
+if (!(Test-Path $requirementsFile)) { throw "Missing requirements: $requirementsFile" }
 
 Write-Host "Using Python: $pythonExe"
-Write-Host "Using repo root for PyInstaller path: $repoRoot"
-
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
-
-if (!(Test-Path $requirementsFile)) {
-  throw "Missing requirements file: $requirementsFile"
-}
-
-Write-Host "Syncing bridge build dependencies from: $requirementsFile"
 & $pythonExe -m pip install -r $requirementsFile
+if ($LASTEXITCODE -ne 0) { throw 'Bridge dependency installation failed.' }
 
+# JSON bridge MUST retain stdin/stdout. --windowed sets these streams to None.
+# Rust launches this console executable with CREATE_NO_WINDOW, avoiding flashes.
+$arguments = @('-m', 'PyInstaller', '--noconfirm', '--clean', '--onefile', '--console',
+  '--name', 'elisa_bridge', '--paths', $repoRoot,
+  '--distpath', $outDir, '--workpath', $buildDir, '--specpath', $buildDir,
+  '--hidden-import', 'elisa_calculator.bridge', '--collect-submodules', 'elisa_calculator',
+  '--hidden-import', 'numpy', '--hidden-import', 'pandas', '--hidden-import', 'scipy',
+  '--hidden-import', 'matplotlib', '--hidden-import', 'xml.parsers.expat')
+
+# Conda may need explicit expat DLLs; regular python.org environments do not.
+$pythonHome = Split-Path -Parent $pythonExe
+foreach ($relative in @('DLLs\pyexpat.pyd', 'Library\bin\expat.dll', 'Library\bin\libexpat.dll')) {
+  $binary = Join-Path $pythonHome $relative
+  if (Test-Path $binary) { $arguments += @('--add-binary', "$binary;.") }
+}
+foreach ($module in @('tkinter', '_tkinter', 'IPython', 'jupyter', 'notebook',
+  'PyQt5', 'PyQt6', 'PySide2', 'PySide6', 'wx', 'bokeh', 'plotly', 'altair',
+  'sklearn', 'skimage', 'xarray', 'dask', 'sqlalchemy', 'numba', 'h5py', 'tables')) {
+  $arguments += @('--exclude-module', $module)
+}
+$arguments += $bridgeEntry
+& $pythonExe @arguments
+if ($LASTEXITCODE -ne 0) { throw 'PyInstaller bridge build failed.' }
 $bridgeExe = Join-Path $outDir 'elisa_bridge.exe'
-if (Test-Path $bridgeExe) {
-  Remove-Item $bridgeExe -Force
-}
-
-& $pythonExe -m PyInstaller `
-  --noconfirm `
-  --clean `
-  --onefile `
-  --windowed `
-  --name elisa_bridge `
-  --paths $repoRoot `
-  --distpath $outDir `
-  --workpath $buildDir `
-  --specpath $buildDir `
-  --hidden-import elisa_calculator.bridge `
-  --collect-submodules elisa_calculator `
-  --hidden-import numpy `
-  --hidden-import pandas `
-  --hidden-import scipy `
-  --hidden-import matplotlib `
-  --hidden-import xml.parsers.expat `
-  --add-binary "$pyexpatPyd;." `
-  --add-binary "$expatDll;." `
-  --add-binary "$libExpatDll;." `
-  --exclude-module tkinter `
-  --exclude-module _tkinter `
-  --exclude-module pyperclip `
-  --exclude-module IPython `
-  --exclude-module jupyter `
-  --exclude-module notebook `
-  --exclude-module PyQt5 `
-  --exclude-module PyQt6 `
-  --exclude-module PySide2 `
-  --exclude-module PySide6 `
-  --exclude-module wx `
-  --exclude-module sphinx `
-  --exclude-module bokeh `
-  --exclude-module plotly `
-  --exclude-module altair `
-  --exclude-module sklearn `
-  --exclude-module skimage `
-  --exclude-module xarray `
-  --exclude-module dask `
-  --exclude-module sqlalchemy `
-  --exclude-module numba `
-  --exclude-module h5py `
-  --exclude-module tables `
-  --exclude-module openpyxl `
-  --exclude-module lxml `
-  --exclude-module rich `
-  --exclude-module click `
-  --exclude-module pytest `
-  --exclude-module setuptools `
-  --exclude-module wheel `
-  --exclude-module pip `
-  --exclude-module Cython `
-  --exclude-module docutils `
-  $bridgeEntry
-
-if (!(Test-Path $bridgeExe)) {
-  throw "Build failed. Missing $bridgeExe"
-}
-
-$sizeMb = [math]::Round((Get-Item $bridgeExe).Length / 1MB, 1)
-Write-Host "Bridge executable ready: $bridgeExe ($sizeMb MB)"
+if (!(Test-Path $bridgeExe)) { throw "Bridge executable missing: $bridgeExe" }
+Write-Host "Bridge executable ready: $bridgeExe"

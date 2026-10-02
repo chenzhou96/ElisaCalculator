@@ -1,0 +1,15 @@
+{
+  "command": "run",
+  "raw_text": "step,Reference,Sample_4X\n1,2.761493605490578,2.8698320105208537\n2,2.5065680393449,2.844909309186031\n3,1.903051103311573,2.761493605490578\n4,1.0569488966884268,2.5065680393449\n5,0.4534319606551,1.903051103311573\n6,0.198506394509422,1.0569488966884268\n7,0.11509069081396901,0.4534319606551\n8,0.09016798947914616,0.198506394509422\n",
+  "analysis_options": {
+    "workflow": "comparative",
+    "input_mode": "dilution_step",
+    "dilution_factor": 2,
+    "dilution_direction": "increasing",
+    "first_step": 1,
+    "fit_mode": "shared",
+    "reference_group": "Reference",
+    "reference_assigned_value": 10
+  },
+  "save_outputs": false
+}

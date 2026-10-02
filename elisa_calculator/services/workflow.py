@@ -62,8 +62,9 @@ def parse_workflow_input(
     source_label='Paste',
     encoding_used=None,
     table_reader: Callable = read_table_from_raw_text,
+    header_mode='auto',
 ):
-    df, meta = table_reader(raw_text)
+    df, meta = table_reader(raw_text) if header_mode == 'auto' else table_reader(raw_text, header_mode=header_mode)
     if df is None:
         return ParseStageResult(
             ok=False,
@@ -206,6 +207,12 @@ def run_calculation_workflow(
         calculator=calculator,
         calculator_kwargs=calculator_kwargs,
     )
+    if calculation_result.report is not None:
+        calculation_result.report.metadata.update({
+            'raw_input': raw_text, 'source_label': parse_result.source_label,
+            'encoding_used': parse_result.encoding_used, 'parse_metadata': parse_result.meta,
+            'column_selection': calculator_kwargs or {},
+        })
     export_result = export_workflow_outputs(
         calculation_result.report,
         source_label=parse_result.source_label,

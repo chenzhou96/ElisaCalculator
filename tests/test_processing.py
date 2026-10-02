@@ -85,12 +85,12 @@ class TestProcessing(unittest.TestCase):
         df, _ = read_table_from_raw_text(raw)
         self.assertIsNotNone(df)
 
-        prepared, status_msg, removed_count = prepare_group_data(df, x_col_name='logX')
+        prepared, status_msg, removed_count = prepare_group_data(df, x_col_name='logX', analysis_options={'input_mode': 'log_concentration'})
         self.assertEqual(status_msg, 'Success')
         self.assertIsNotNone(prepared)
         self.assertEqual(removed_count, 0)
 
-        results, calc_status, _, report = calculate_ec50_global_df(df, x_col_name='logX')
+        results, calc_status, _, report = calculate_ec50_global_df(df, x_col_name='logX', analysis_options={'input_mode': 'log_concentration'})
         self.assertEqual(calc_status, 'Success')
         self.assertIsNotNone(report)
         self.assertTrue(report.fit_success)

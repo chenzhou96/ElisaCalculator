@@ -1,4 +1,7 @@
 $ErrorActionPreference = 'Stop'
+$OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+[Console]::OutputEncoding = $OutputEncoding
+$env:PYTHONIOENCODING = 'utf-8'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $buildScript = Join-Path $PSScriptRoot 'build-bridge-exe.ps1'
@@ -7,6 +10,7 @@ $bridgeExe = Join-Path $projectRoot 'src-tauri\resources\bridge\elisa_bridge.exe
 Write-Host '=== Bridge Health Check ==='
 Write-Host '[1/4] Rebuilding bridge executable...'
 & powershell -ExecutionPolicy Bypass -File $buildScript
+if ($LASTEXITCODE -ne 0) { throw 'Bridge build failed.' }
 
 if (!(Test-Path $bridgeExe)) {
   throw "Bridge executable not found: $bridgeExe"
@@ -24,11 +28,13 @@ $parseRequest = @{
 $runRequest = @{
   command = 'run'
   raw_text = "logX,GroupA,GroupB`n-2,0.98,1.02`n-1,0.86,0.88`n0,0.55,0.60`n1,0.22,0.28`n2,0.10,0.12"
+  analysis_options = @{ input_mode = 'log_concentration'; concentration_unit = 'relative dose'; fit_mode = 'shared' }
   save_outputs = $true
 }
 
 Write-Host '[3/4] Running parse smoke test...'
 $parseRaw = ($parseRequest | ConvertTo-Json -Compress) | & $bridgeExe
+if ($LASTEXITCODE -ne 0) { throw 'Parse bridge process failed.' }
 $parseResponse = $parseRaw | ConvertFrom-Json
 if (-not $parseResponse.ok) {
   throw "Parse smoke test failed: $($parseResponse.error)"
@@ -36,11 +42,13 @@ if (-not $parseResponse.ok) {
 
 Write-Host '[4/4] Running run/export smoke test...'
 $runRaw = ($runRequest | ConvertTo-Json -Compress) | & $bridgeExe
+if ($LASTEXITCODE -ne 0) { throw 'Run bridge process failed.' }
 $runResponse = $runRaw | ConvertFrom-Json
 if (-not $runResponse.ok) {
   throw "Run smoke test failed: $($runResponse.error)"
 }
 
+if ($runResponse.export_error -or @($runResponse.export_warnings).Count -gt 0) { throw "Export failed: $($runResponse.export_error)" }
 $outputDir = [string]($runResponse.output_dir)
 if (![string]::IsNullOrWhiteSpace($outputDir) -and !(Test-Path $outputDir)) {
   throw "Run reported output_dir but directory does not exist: $outputDir"

@@ -45,6 +45,11 @@ def _serialize_report(report):
         'global_params': report.global_params,
         'summary_rows': report.summary_rows,
         'detailed_rows': [row.to_dict() for row in report.detailed_rows],
+        'options': report.options,
+        'metadata': report.metadata,
+        'comparison': report.comparison,
+        'unknown_results': report.unknown_results,
+        'warning_list': report.warning_list,
     })
 
 
@@ -70,11 +75,13 @@ def _load_request_payload(request):
 def _build_calculator_kwargs(request):
     calculator_kwargs = {}
     x_col_name = request.get('x_col_name')
-    if x_col_name:
+    if x_col_name is not None:
         calculator_kwargs['x_col_name'] = x_col_name
     y_cols_names = request.get('y_cols_names')
-    if y_cols_names:
+    if y_cols_names is not None:
         calculator_kwargs['y_cols_names'] = y_cols_names
+    if 'analysis_options' in request:
+        calculator_kwargs['analysis_options'] = request['analysis_options']
     return calculator_kwargs
 
 
@@ -87,6 +94,7 @@ def handle_parse_request(request):
         raw_text,
         source_label=source_label,
         encoding_used=encoding_used,
+        header_mode=request.get('header_mode', 'auto'),
     )
     if not parse_result.ok:
         return {
@@ -98,6 +106,8 @@ def handle_parse_request(request):
         }
 
     preview_rows = request.get('preview_rows', 5)
+    if isinstance(preview_rows, bool) or not isinstance(preview_rows, int) or not 1 <= preview_rows <= 1000:
+        return {'ok': False, 'error': 'preview_rows must be an integer between 1 and 1000'}
     return {
         'ok': True,
         'error': '',
@@ -107,10 +117,14 @@ def handle_parse_request(request):
         'preview_text': preview_dataframe_text(parse_result.df, n=preview_rows),
         'row_count': int(parse_result.df.shape[0]),
         'column_count': int(parse_result.df.shape[1]),
+        'columns': list(parse_result.df.columns),
+        'preview_rows': _normalize_json_value(parse_result.df.head(int(preview_rows)).to_dict(orient='records')),
     }
 
 
 def handle_run_request(request):
+    if 'save_outputs' in request and not isinstance(request['save_outputs'], bool):
+        return {'ok': False, 'error': 'save_outputs must be a boolean'}
     raw_text, source_label, encoding_used, load_error = _load_request_payload(request)
     if load_error:
         return {'ok': False, 'error': load_error}
@@ -119,6 +133,7 @@ def handle_run_request(request):
         raw_text,
         source_label=source_label,
         encoding_used=encoding_used,
+        header_mode=request.get('header_mode', 'auto'),
     )
     if not parse_result.ok:
         return {
@@ -134,6 +149,22 @@ def handle_run_request(request):
         calculator_kwargs=_build_calculator_kwargs(request),
     )
 
+    previews, preview_warnings = [], []
+    if calculation_result.report is not None:
+        calculation_result.report.metadata.update({
+            'source_label': parse_result.source_label, 'encoding_used': parse_result.encoding_used,
+            'raw_input': raw_text, 'raw_input_original': request.get('raw_text') if isinstance(request.get('raw_text'), str) and request['raw_text'].strip() else raw_text,
+            'text_normalization': 'UTF-8 BOM and zero-width format characters removed from pasted text; CR/CRLF normalized to LF',
+            'header_mode': request.get('header_mode', 'auto'),
+            'parse_metadata': parse_result.meta,
+            'column_selection': {'x_col_name': request.get('x_col_name'), 'y_cols_names': request.get('y_cols_names')},
+        })
+        if calculation_result.report.fit_success:
+            try:
+                from .visualization.plotting import create_preview_plots
+                previews = create_preview_plots(calculation_result.report.to_dict())
+            except Exception as exc:
+                preview_warnings.append(f'preview generation failed: {exc}')
     save_outputs = bool(request.get('save_outputs', False))
     export_result = export_workflow_outputs(
         calculation_result.report,
@@ -147,6 +178,8 @@ def handle_run_request(request):
         'source_label': parse_result.source_label,
         'encoding_used': parse_result.encoding_used,
         'status_msg': calculation_result.status_msg,
+        'previews': previews,
+        'preview_warnings': preview_warnings,
         'removed_count': calculation_result.removed_count,
         'results': calculation_result.results,
         'report': _serialize_report(calculation_result.report),
@@ -176,6 +209,8 @@ def handle_normalize_text_request(request):
 
 
 def handle_request(request):
+    if not isinstance(request, dict):
+        return {'ok': False, 'error': 'request must be a JSON object'}
     command = request.get('command', 'run')
     if command == 'normalize_text':
         return handle_normalize_text_request(request)

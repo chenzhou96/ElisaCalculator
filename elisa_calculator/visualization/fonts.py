@@ -15,6 +15,7 @@ def configure_matplotlib_chinese_font():
         'PingFang SC',
         'Heiti SC',
         'Noto Sans CJK SC',
+        'Noto Sans CJK JP',  # TTC face name on many Linux distributions; includes Han glyphs
         'Noto Sans SC',
         'Source Han Sans CN',
         'Source Han Sans SC',

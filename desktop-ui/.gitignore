@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local QA evidence
+/artifacts/
+/playwright-report/
+/test-results/

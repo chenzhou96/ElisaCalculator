@@ -1,134 +1,78 @@
-# ElisaCalculator
+# ELISA Calculator 0.2
 
-ELISA 4PL Global Fit 工具，支持导入/粘贴数据，进行共享 A/D 的全局拟合，并导出汇总与图片。
-当前仓库使用 **Tauri + React GUI** 作为唯一桌面界面，计算复用 Python 核心逻辑。
+本地桌面科研分析工作台：比较抗体/试剂的剂量–响应曲线及参比倍数，或用标准曲线反算未知样本。Tauri 2 + React/TypeScript 界面，Python/SciPy 计算引擎；数据留在本机。
 
-## 项目结构
+## 科研工作流
 
-```text
-ElisaCalculator/
-├── ElisaCalculator.py            # 薄入口（兼容）
-├── desktop-ui/                   # 新的 Tauri + React 桌面界面
-├── elisa_calculator/
-│   ├── __main__.py               # python -m 入口
-│   ├── app.py                    # 兼容入口（转发到 bridge）
-│   ├── bridge.py                 # JSON 桥接层，供新 GUI 调用
-│   ├── common.py                 # 通用工具
-│   ├── core/                     # 模型与计算
-│   ├── io/                       # 读取、写出、表格格式化
-│   ├── visualization/            # 字体与绘图
-│   └── services/                 # 计算工作流编排（扩展点）
-├── tests/                        # 最小回归测试
-└── docs/
-    └── EXTENDING.md              # 扩展说明
-```
+- **曲线比较**：CSV/TSV/文本粘贴 → 确认表头与列 → 选择 X 语义与拟合模式 → 选择参比及其 1X/10X 等赋值 → 查看结果、质量警告与曲线
+- **标准定量**：准备标准曲线 → 指定标准组 → 输入未知样本响应及稀释倍数 → 查看插值/范围检查及校正结果
+- X 支持原始浓度、log10 浓度，以及常用的 1–8 稀释序号。序号模式默认越大稀释越多，倍数可配；起始浓度未知时只给相对剂量，绝不伪造绝对浓度
+- 独立/共享平台拟合显式选择；空白和复孔处理显式设置
+- 图预览不依赖导出；输入或设置变化后旧结果失效
 
-## 运行
+详细公式、适用假设与参比倍数解释见 [科学模型说明](docs/SCIENTIFIC_MODEL.md)。演示数据仅用于软件验证，不是实验结论。
 
-### 安装 Python 最小依赖
+## 运行环境
 
-```bash
+Python 3.10+、Node.js 24.15+（源码开发与测试要求；已验证 24.19，打包后的桌面版用户不需要 Node）；原生桌面还需要 Rust、平台 Tauri 系统依赖。Windows 打包需要 Visual Studio C++ Build Tools / Windows SDK。
+
+```sh
 python -m pip install -r requirements.txt
-```
-
-如需构建桥接可执行文件（PyInstaller），使用：
-
-```bash
-python -m pip install -r requirements-build.txt
-```
-
-### 运行 Python 桥接（CLI）
-
-```bash
-python -m elisa_calculator.bridge --request-file request.json
-```
-
-兼容入口也可用：
-
-```bash
-python -m elisa_calculator --request-file request.json
-```
-
-### 运行新 Tauri + React GUI
-
-先确保本机已安装：
-
-1. Python 3
-2. Node.js
-3. Rust toolchain
-4. Visual Studio C++ Build Tools / Windows SDK
-
-然后在项目根目录执行：
-
-```bash
 cd desktop-ui
-npm install
+npm ci
 npm run tauri:dev
 ```
 
-新 GUI 通过 `python -m elisa_calculator.bridge` 调用现有 Python 工作流，因此当前开发模式默认依赖本机可用的 `python` 或 `py -3` 命令。
+开发桌面版通过系统 `python` / Windows `py -3` 调用 Python；Windows release 构建执行 PyInstaller 脚本并优先使用内置 bridge executable，失败时才回退系统 Python。实际安装包需在 Windows 构建并验证，不能以网页构建替代。
 
-## 测试
+## 本地浏览器集成验证
 
-```bash
-python -m unittest discover -s tests -v
+只用于开发，不是联网部署：
+
+```sh
+cd desktop-ui
+VITE_ELISA_DEV_BRIDGE=1 npm run dev
 ```
 
-前端构建检查：
+浏览器打开 http://127.0.0.1:1420。这个显式启用的开发适配器仅接受回环客户端、同源 JSON 请求，调用同一 Python 引擎；不会允许任意文件读取或任意命令。未启用适配器的普通浏览器不会伪造计算结果。Windows PowerShell 先执行 `$env:VITE_ELISA_DEV_BRIDGE='1'`。
 
-```bash
+## 验证
+
+```sh
+python -m unittest discover -s tests -v
 cd desktop-ui
 npm run build
+npm run lint
 ```
 
-## 发布（Windows）
+前端交互、端到端脚本见 `desktop-ui/tests/` 及 package.json 的测试命令。无可写用户目录的 CI 环境应把 `XDG_CACHE_HOME`、`MPLCONFIGDIR` 设置到可写临时目录。
 
-### 1) 发布前检查
+测试覆盖应包括真值曲线、稀释方向、参比赋值、反算往返、非法/非有限输入、范围与不确定性、旧结果失效、失败导出及常见桌面窗口布局。测试通过仅证明所覆盖的软件行为，不等于实验方法已验证。
 
-```bash
-python -m unittest discover -s tests -v
+## 导出与分析记录
+
+导出写入平台应用缓存目录下唯一的分析目录，路径显示在结果中：
+
+- `EC50_Summary.csv`：曲线摘要
+- `Unknown_Samples.csv`：未知样本结果（存在时）
+- `Input_Audit.csv`：原始及处理数据追踪
+- `Analysis_Record.json`：带版本、配置、完整报告与导出警告的规范记录
+- 分组 PNG 与总览 PNG
+
+界面“保存记录”生成的 `elisa-analysis/1` JSON 可用“恢复分析记录”恢复输入并重新计算。缓存中的 `Analysis_Record.json` 是完整科学审计格式，用于审阅或脚本复算，并不是界面状态文件。
+
+请把需要长期保存的记录复制到实验项目目录。系统缓存不是长期存档位置。CSV 中可能被电子表格当成公式的用户文本会被转义；JSON 保留原值。
+
+## Windows 发布
+
+```sh
+python -m pip install -r requirements-build.txt
 cd desktop-ui
-npm run tauri build -- --no-bundle
+npm run tauri:build
 ```
 
-说明：`--no-bundle` 会先验证可执行文件可正常构建，产物为 `desktop-ui/src-tauri/target/release/app.exe`。
+内置 bridge 由 beforeBuildCommand 自动构建。构建会优先使用 BRIDGE_PYTHON_HOME 指定环境，否则自动检测 Python，不再依赖个人 D 盘路径。桥接必须使用 console 模式保留 JSON 标准输入/输出；Rust 的 CREATE_NO_WINDOW 负责隐藏窗口（[PyInstaller 说明](https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html#sys-stdin-sys-stdout-and-sys-stderr-in-noconsole-windowed-applications-windows-only)）。离线安装工具准备脚本保留。发布前应在没有开发 Python 环境的干净 Windows 用户账户验证安装、启动、计算、中文输入、导出和卸载。源码更新不代表已经生成可分发安装包。
 
-### 2) 生成安装包
+## 结构
 
-```bash
-cd desktop-ui
-npm run tauri build -- --bundles nsis
-```
-
-如果网络受限，Tauri 可能在首次打包时下载 NSIS/WiX 失败（超时）。这是安装包工具链下载失败，不影响 `app.exe` 构建。
-
-### 3) Python 运行依赖
-
-当前桌面版通过 Python 桥接运行计算逻辑，目标机器需要可用的 Python 环境及依赖（如 numpy/pandas/scipy/matplotlib）。
-
-建议直接使用仓库内依赖清单：
-
-- `requirements.txt`：运行时最小依赖
-- `requirements-build.txt`：构建桥接 exe 所需依赖（包含 PyInstaller）
-
-本仓库已将 `elisa_calculator` 包作为 Tauri 资源纳入构建，发布版会在运行时自动查找资源目录。
-
-### 4) 离线打包（无外网）
-
-Tauri 已配置 `bundle.useLocalToolsDir=true`，会优先使用项目内缓存目录：`desktop-ui/src-tauri/target/.tauri`。
-
-首次准备离线工具缓存：
-
-```bash
-cd desktop-ui
-npm run tauri:prepare:offline-tools
-```
-
-离线构建命令：
-
-```bash
-cd desktop-ui
-npm run tauri:build:nsis:offline
-npm run tauri:build:msi:offline
-```
-
+`elisa_calculator/core` 科学计算；`io` 解析/导出；`services` 流程；`bridge.py` JSON 协议；`visualization` 预览和导出共用绘图；`desktop-ui` React 界面与 Rust 原生桥接；`tests` 回归测试。
