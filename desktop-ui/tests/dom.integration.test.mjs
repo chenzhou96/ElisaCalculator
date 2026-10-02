@@ -72,6 +72,7 @@ async function run() {
 
 test('actual comparison CLI result renders 40X, creates plots with export disabled, and invalidates on settings change', async () => {
   render(React.createElement(Workbench))
+  fireEvent.click(screen.getByRole('tab', {name:'表格输入',exact:true}))
   await parse(comparison.raw_text)
   navigate('分析设置')
   change('参考组','Reference')
@@ -99,6 +100,7 @@ test('actual comparison CLI result renders 40X, creates plots with export disabl
 
 test('actual standard CLI result renders 12 ng/mL and corrected 60 ng/mL while guarding out-of-range OD', async () => {
   render(React.createElement(Workbench))
+  fireEvent.click(screen.getByRole('tab', {name:'表格输入',exact:true}))
   click(/^标准曲线\s*未知样品浓度反算$/)
   await parse(standard.raw_text)
   navigate('分析设置')
@@ -131,6 +133,7 @@ test('actual standard CLI result renders 12 ng/mL and corrected 60 ng/mL while g
 
 test('example parsing, header override, invalid table and invalid option remain actionable', async () => {
   render(React.createElement(Workbench))
+  fireEvent.click(screen.getByRole('tab', {name:'表格输入',exact:true}))
   click('载入示例')
   await parse(screen.getByLabelText('原始 ELISA 数据').value)
   assert.ok(screen.getByRole('cell',{name:'2.375',exact:true}))
@@ -156,6 +159,7 @@ test('example parsing, header override, invalid table and invalid option remain 
 
 test('file decoding, portable JSON restore, stale-file guard, menus and reset cancellation preserve user work', async () => {
   render(React.createElement(Workbench))
+  fireEvent.click(screen.getByRole('tab', {name:'表格输入',exact:true}))
   const bytes = await readFile(new URL('../../examples/comparison_8_steps.csv', import.meta.url))
   const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
   const dataInput = document.querySelector('input[type="file"][accept=".csv,.tsv,.txt"]')

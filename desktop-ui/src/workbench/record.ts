@@ -1,5 +1,6 @@
 import { defaultOptions, type Workspace } from "./model.ts";
 import type { AnalysisOptions, UnknownInput } from "./types";
+import { createPlate, validatePlate } from "./plate.ts";
 export const RECORD_SCHEMA = "elisa-analysis/1";
 export function serializeRecord(state: Workspace) {
   return JSON.stringify(
@@ -8,6 +9,8 @@ export function serializeRecord(state: Workspace) {
       app_version: "0.2.0",
       saved_at: new Date().toISOString(),
       inputs: {
+        inputView: state.inputView,
+        plate: state.plate,
         rawText: state.rawText,
         source: state.source,
         headerMode: state.headerMode,
@@ -36,6 +39,8 @@ export function parseRecord(
   | "replicateText"
   | "unknowns"
   | "saveOutputs"
+  | "plate"
+  | "inputView"
 > {
   const record = JSON.parse(text);
   if (
@@ -45,6 +50,8 @@ export function parseRecord(
   )
     throw new Error("这不是兼容的 ELISA 分析记录（elisa-analysis/1）");
   const input = record.inputs;
+  if (input.inputView != null && !["plate", "table"].includes(input.inputView)) throw new Error("记录中的输入视图无效");
+  const plate = input.plate == null ? createPlate() : validatePlate(input.plate);
   if (
     input.options != null &&
     (typeof input.options !== "object" || Array.isArray(input.options))
@@ -106,6 +113,8 @@ export function parseRecord(
   opts.replicate_groups = {};
   opts.unknown_samples = [];
   return {
+    inputView: input.inputView ?? "table",
+    plate,
     rawText: input.rawText,
     source: String(input.source ?? "分析记录"),
     headerMode: ["auto", "present", "absent"].includes(input.headerMode)

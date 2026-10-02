@@ -7,6 +7,8 @@ import type {
   UnknownInput,
 } from "./types";
 
+import { createPlate, compilePlate, curveGroups, plateExample, type PlateDocument } from "./plate.ts";
+
 export const defaultOptions: AnalysisOptions = {
   workflow: "comparative",
   input_mode: "dilution_step",
@@ -26,8 +28,13 @@ export const defaultOptions: AnalysisOptions = {
   allow_extrapolation: false,
   unknown_samples: [],
 };
+export interface PlateSnapshot { plate: PlateDocument; options: AnalysisOptions }
 export interface Workspace {
   page: Page;
+  inputView: "plate" | "table";
+  plate: PlateDocument;
+  platePast: PlateSnapshot[];
+  plateFuture: PlateSnapshot[];
   rawText: string;
   source: string;
   headerMode: HeaderMode;
@@ -46,6 +53,10 @@ export interface Workspace {
 }
 export const initialWorkspace: Workspace = {
   page: "data",
+  inputView: "plate",
+  plate: createPlate(),
+  platePast: [],
+  plateFuture: [],
   rawText: "",
   source: "未导入数据",
   headerMode: "auto",
@@ -75,6 +86,12 @@ type InputPatch = Partial<
   >
 >;
 export type Action =
+  | { type: "view"; view: Workspace["inputView"] }
+  | { type: "plate"; plate: PlateDocument }
+  | { type: "plate-selection"; selected: string[]; anchor: string }
+  | { type: "plate-undo" }
+  | { type: "plate-redo" }
+  | { type: "plate-example"; workflow: AnalysisOptions["workflow"] }
   | { type: "page"; page: Page }
   | { type: "input"; patch: InputPatch }
   | { type: "options"; patch: Partial<AnalysisOptions> }
@@ -94,7 +111,7 @@ export type Action =
         | "replicateText"
         | "unknowns"
         | "saveOutputs"
-      >;
+      > & Partial<Pick<Workspace, "plate" | "inputView">>;
     }
   | { type: "begin"; request: number; busy: Workspace["busy"] }
   | {
@@ -132,6 +149,22 @@ function current(
 }
 export function reducer(state: Workspace, action: Action): Workspace {
   switch (action.type) {
+    case "view":
+      return state.inputView === action.view ? state : {...changed(state, true), inputView: action.view, page: "data", status: "已切换输入视图；两份原始输入分别保留，请重新检查"};
+    case "plate-selection":
+      return {...state, plate: {...state.plate, selected: action.selected, anchor: action.anchor}};
+    case "plate":
+      return {...changed(state, true), plate: action.plate, platePast: [...state.platePast.slice(-39), {plate: state.plate, options: state.options}], plateFuture: []};
+    case "plate-undo": {
+      if (!state.platePast.length) return state;
+      return {...changed(state, true), plate: state.platePast.at(-1)!.plate, options: state.platePast.at(-1)!.options, platePast: state.platePast.slice(0, -1), plateFuture: [{plate: state.plate, options: state.options}, ...state.plateFuture]};
+    }
+    case "plate-redo": {
+      if (!state.plateFuture.length) return state;
+      return {...changed(state, true), plate: state.plateFuture[0].plate, options: state.plateFuture[0].options, platePast: [...state.platePast.slice(-39), {plate: state.plate, options: state.options}], plateFuture: state.plateFuture.slice(1)};
+    }
+    case "plate-example":
+      return {...changed(state, true), inputView: "plate", plate: plateExample(action.workflow), platePast: [...state.platePast.slice(-39), {plate: state.plate, options: state.options}], plateFuture: [], options: {...defaultOptions, workflow: action.workflow, reference_group: "Reference", reference_assigned_value: 10, standard_group: "Standard", fit_mode: action.workflow === "comparative" ? "shared" : "independent"}, status: "合成孔板示例已载入；请检查映射"};
     case "page":
       return { ...state, page: action.page };
     case "input":
@@ -144,24 +177,33 @@ export function reducer(state: Workspace, action: Action): Workspace {
       };
     case "options":
       return {
-        ...changed(state),
+        ...changed(state, state.inputView === "plate"),
         options: { ...state.options, ...action.patch },
+        ...(state.inputView === "plate" ? {platePast: [...state.platePast.slice(-39), {plate: state.plate, options: state.options}], plateFuture: []} : {}),
       };
     case "restore":
       return current(state, action)
         ? {
             ...initialWorkspace,
             ...action.workspace,
+            inputView: action.workspace.inputView ?? "table",
+            plate: action.workspace.plate ?? createPlate(),
+            platePast: [],
+            plateFuture: [],
             version: state.version + 1,
             status: "分析记录已恢复，请重新解析和计算",
           }
         : state;
     case "reset":
-      return { ...initialWorkspace, version: state.version + 1 };
+      return { ...initialWorkspace, plate: createPlate(), version: state.version + 1 };
     case "example": {
       const standard = action.workflow === "standard_curve";
       return {
         ...initialWorkspace,
+        inputView: "table",
+        plate: state.plate,
+        platePast: state.platePast,
+        plateFuture: state.plateFuture,
         version: state.version + 1,
         source: standard ? "示例 · 标准曲线" : "示例 · 两倍连续稀释",
         rawText: standard ? STANDARD_EXAMPLE : COMPARISON_EXAMPLE,
@@ -207,6 +249,7 @@ export function reducer(state: Workspace, action: Action): Workspace {
       return current(state, action)
         ? {
             ...changed(state, true),
+            inputView: "table",
             rawText: action.text,
             source: action.source,
             xColumn: "",
@@ -286,6 +329,7 @@ export function parseReplicateGroups(text: string): Record<string, string[]> {
   return result;
 }
 export function availableGroups(state: Workspace): string[] {
+  if (state.inputView === "plate") return curveGroups(state.plate);
   const columns = (state.parsed?.meta?.columns ?? []).filter(
     (name) => name !== state.xColumn,
   );
@@ -301,6 +345,11 @@ export function availableGroups(state: Workspace): string[] {
   }
 }
 export function buildOptions(state: Workspace): AnalysisOptions {
+  if (state.inputView === "plate") {
+    const compiled = compilePlate(state.plate, state.options);
+    if (!compiled.ok) throw new Error(compiled.errors.slice(0, 3).join("；"));
+    return compiled.options;
+  }
   const options = {
     ...state.options,
     replicate_groups: parseReplicateGroups(state.replicateText),

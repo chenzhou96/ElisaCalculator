@@ -157,6 +157,7 @@ def handle_run_request(request):
             'text_normalization': 'UTF-8 BOM and zero-width format characters removed from pasted text; CR/CRLF normalized to LF',
             'header_mode': request.get('header_mode', 'auto'),
             'parse_metadata': parse_result.meta,
+            **({'plate_mapping': request['plate_mapping']} if isinstance(request.get('plate_mapping'), dict) and request['plate_mapping'].get('schema') == 'elisa-plate-mapping/1' else {}),
             'column_selection': {'x_col_name': request.get('x_col_name'), 'y_cols_names': request.get('y_cols_names')},
         })
         if calculation_result.report.fit_success:

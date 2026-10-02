@@ -5,7 +5,7 @@ import { initialWorkspace, defaultOptions, reducer, formatNumber, parseReplicate
 const parsed = { ok: true, meta: { columns: ['Step', 'Reference', 'Sample A', 'Sample B'] }, row_count: 8 }
 const result = { ok: true, report: { fit_success: true, summary_rows: [], detailed_rows: [], global_params: {}, fit_error: '' } }
 function state(patch = {}) {
-  return { ...structuredClone(initialWorkspace), parsed, xColumn: 'Step', options: { ...structuredClone(defaultOptions), reference_group: 'Reference' }, ...patch }
+  return { ...structuredClone(initialWorkspace), inputView: "table", parsed, xColumn: 'Step', options: { ...structuredClone(defaultOptions), reference_group: 'Reference' }, ...patch }
 }
 function standard(patch = {}) {
   return state({ ...patch, options: { ...structuredClone(defaultOptions), workflow: 'standard_curve', input_mode: 'raw_concentration', standard_group: 'Reference', ...patch.options }, unknowns: patch.unknowns ?? [{ id: 'one', sample: 'Unknown', od: '0.4; 0.5', dilution: '5' }] })

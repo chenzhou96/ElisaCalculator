@@ -12,6 +12,8 @@ import { buildOptions, initialWorkspace, reducer, formatNumber } from "./model";
 import type { Page, ParseResponse, RunResponse, Workflow } from "./types";
 import { Icon } from "./Primitives";
 import DataPanel from "./DataPanel";
+import PlatePanel from "./PlatePanel";
+import { compilePlate } from "./plate";
 import SettingsPanel from "./SettingsPanel";
 import UnknownPanel from "./UnknownPanel";
 import ResultsPanel, { ResultInspector } from "./ResultsPanel";
@@ -67,14 +69,16 @@ export default function Workbench() {
   async function analyze(kind: "parse" | "run") {
     if (lockRef.current) return;
     let options;
+    const plate = state.inputView === "plate" ? compilePlate(state.plate, state.options) : null;
     try {
+      if (plate && !plate.ok) throw new Error(plate.errors.slice(0, 3).join("；"));
       if (kind === "run") options = buildOptions(state);
     } catch (error) {
       dispatch({
         type: "error",
         error: String(error instanceof Error ? error.message : error),
       });
-      dispatch({ type: "page", page: "settings" });
+      dispatch({ type: "page", page: state.inputView === "plate" ? "data" : "settings" });
       return;
     }
     lockRef.current = true;
@@ -84,11 +88,12 @@ export default function Workbench() {
     try {
       const payload = {
         command: kind,
-        raw_text: state.rawText,
-        source_label: state.source,
-        header_mode: state.headerMode,
+        raw_text: plate?.rawText ?? state.rawText,
+        source_label: plate ? "96 孔板 · 明确孔位映射" : state.source,
+        header_mode: plate ? "present" : state.headerMode,
         preview_rows: 200,
-        x_col_name: state.xColumn || undefined,
+        x_col_name: plate ? "Dose" : state.xColumn || undefined,
+        ...(plate ? {plate_mapping: plate.mapping} : {}),
         ...(kind === "run"
           ? { analysis_options: options, save_outputs: state.saveOutputs }
           : {}),
@@ -194,20 +199,22 @@ export default function Workbench() {
   }
   function reset() {
     setMenu(null);
-    if (state.rawText || state.result) setConfirmReset(true);
+    if (state.rawText || state.result || state.plate.wells.some(w => w.raw || w.kind !== "unassigned")) setConfirmReset(true);
     else dispatch({ type: "reset" });
   }
+  const hasInputs = Boolean(state.rawText || state.plate.wells.some(w => w.raw || w.kind !== "unassigned"));
+  const activePlate = state.inputView === "plate" ? compilePlate(state.plate, state.options) : null;
   const row =
     state.result?.report?.summary_rows.find(
       (row) => row.Group === selectedGroup,
     ) ?? state.result?.report?.summary_rows[0];
   const pages: Page[] =
     state.options.workflow === "standard_curve"
-      ? ["data", "settings", "unknowns", "results", "plots"]
+      ? state.inputView === "plate" ? ["data", "settings", "results", "plots"] : ["data", "settings", "unknowns", "results", "plots"]
       : ["data", "settings", "results", "plots"];
   return (
     <div
-      className={`workbench ${compact ? "compact" : ""} ${sidebar ? "" : "sidebar-hidden"}`}
+      className={`workbench ${compact ? "compact" : ""} ${sidebar ? "" : "sidebar-hidden"} ${state.inputView === "plate" && state.page === "data" ? "plate-active" : ""}`}
     >
       <header className="app-bar" data-tauri-drag-region>
         <div className="app-brand" data-tauri-drag-region>
@@ -272,7 +279,7 @@ export default function Workbench() {
                   <button
                     role="menuitem"
                     onClick={saveRecord}
-                    disabled={!state.rawText}
+                    disabled={!hasInputs}
                   >
                     保存分析记录…
                   </button>
@@ -440,14 +447,17 @@ export default function Workbench() {
                   ? "COMPARATIVE ANALYSIS"
                   : "STANDARD CURVE"}
               </span>
-              <h1>{pageNames[state.page]}</h1>
+              <div className="data-heading-title"><h1>{pageNames[state.page]}</h1>{state.page === "data" && <div className="input-tabs" role="tablist" aria-label="输入视图">
+                <button role="tab" aria-selected={state.inputView === "plate"} onClick={() => dispatch({type: "view", view: "plate"})}>96 孔板</button>
+                <button role="tab" aria-selected={state.inputView === "table"} onClick={() => dispatch({type: "view", view: "table"})}>表格输入</button>
+              </div>}</div>
               <p>{pageSubtitles[state.page]}</p>
             </div>
             <div className="page-actions">
               <button
                 title="下载包含原始输入、配置与结果的 JSON"
                 onClick={saveRecord}
-                disabled={!state.rawText}
+                disabled={!hasInputs}
               >
                 <Icon name="download" />
                 保存记录
@@ -456,7 +466,7 @@ export default function Workbench() {
                 className="primary"
                 onClick={() => void analyze("run")}
                 disabled={
-                  !!state.busy || !state.parsed?.ok || !state.rawText.trim()
+                  !!state.busy || !state.parsed?.ok || (activePlate ? !activePlate.ok : !state.rawText.trim())
                 }
               >
                 <Icon name="play" size={13} />
@@ -477,7 +487,7 @@ export default function Workbench() {
           )}
           <div className="workspace-content">
             <div className="page-content">
-              {state.page === "data" && (
+              {state.page === "data" && state.inputView === "table" && (
                 <DataPanel
                   state={state}
                   dispatch={dispatch}
@@ -485,6 +495,7 @@ export default function Workbench() {
                   load={() => fileRef.current?.click()}
                 />
               )}{" "}
+              {state.page === "data" && state.inputView === "plate" && <PlatePanel state={state} dispatch={dispatch} parse={() => void analyze("parse")} />}
               {state.page === "settings" && (
                 <SettingsPanel state={state} dispatch={dispatch} />
               )}{" "}
@@ -501,7 +512,7 @@ export default function Workbench() {
               {state.page === "plots" && <PlotsPanel state={state} />}{" "}
               {state.page === "guide" && <GuidePanel />}
             </div>
-            {inspector && state.page !== "guide" && (
+            {inspector && state.page !== "guide" && !(state.inputView === "plate" && state.page === "data") && (
               <aside className="inspector">
                 <div className="inspector-heading">
                   <h2>

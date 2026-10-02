@@ -86,7 +86,7 @@ export default function ResultsPanel({
         subtitle={
           showUnknown
             ? "孔内值与稀释校正值分别列出；不可反算项显示为空"
-            : "EC50 比值 = 样品 / 参考；相对原液强度使用反比归一"
+            : "EC50 比值 = 样品 / 参考；X 为表观中点强度，平行性与恒定效价未被证明"
         }
         className="results-card"
         action={
@@ -137,7 +137,7 @@ export default function ResultsPanel({
                     EC50 比值<small>样品 / 参考</small>
                   </th>
                   <th>
-                    原液强度<small>参考归一 X</small>
+                    中点原液强度<small>参考归一 X</small>
                   </th>
                   <th>R²</th>
                   <th>状态</th>

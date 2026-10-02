@@ -2,6 +2,7 @@ import type { Dispatch } from "react";
 import { availableGroups, type Action, type Workspace } from "./model";
 import type { AnalysisOptions, InputMode } from "./types";
 import { Card, Field } from "./Primitives";
+import { PlateAnalysisControls } from "./PlatePanel";
 
 export default function SettingsPanel({
   state,
@@ -14,6 +15,7 @@ export default function SettingsPanel({
   const set = (patch: Partial<AnalysisOptions>) =>
     dispatch({ type: "options", patch });
   const groups = availableGroups(state);
+  if (state.inputView === "plate") return <div className="settings-layout"><Card title="孔板分析约定" subtitle="孔位梯度在板图设置；这里明确参比、标准、空白与复孔策略"><PlateAnalysisControls state={state} dispatch={dispatch} /></Card></div>;
   const concentrationKnown =
     options.input_mode !== "dilution_step" ||
     options.start_concentration !== null;

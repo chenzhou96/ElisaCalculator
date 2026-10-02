@@ -46,6 +46,7 @@ test.beforeEach(async ({page}) => {
   page.on('console', message => {if (message.type() === 'error') errors.push(message.text())})
   page.__errors = errors
   await page.goto('/')
+  await page.getByRole('tab', {name: '表格输入', exact: true}).click()
   await expect(page.getByRole('textbox', {name: '原始 ELISA 数据'})).toBeVisible()
 })
 test.afterEach(async ({page}, testInfo) => {
