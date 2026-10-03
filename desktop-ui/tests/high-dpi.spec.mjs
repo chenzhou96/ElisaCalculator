@@ -46,6 +46,20 @@ function decodePng(png) {
   return { width, height, channels, pixels }
 }
 
+function isPaintedPixel(pixel, foreground, background, missing) {
+  // Numeric/invalid readings retain the original near-opaque ink check.
+  if (!missing) return foreground.every((value, c) => Math.abs(pixel[c] - value) <= 35)
+  // A one-pixel em dash can be fully antialiased at fractional device scale.
+  // Require substantial foreground coverage on the actual foreground-to-well
+  // color line, rather than treating a visible blended dash as absent ink.
+  const direction = foreground.map((value, c) => value - background[c])
+  const squaredLength = direction.reduce((sum, value) => sum + value * value, 0)
+  if (!squaredLength) return false
+  const coverage = pixel.reduce((sum, value, c) => sum + (value - background[c]) * direction[c], 0) / squaredLength
+  return coverage >= 0.65 && coverage <= 1.05 && pixel.every((value, c) =>
+    Math.abs(value - (background[c] + coverage * direction[c])) <= 10)
+}
+
 async function capture(page, info, name, { board = false } = {}) {
   await page.evaluate(async () => {
     await document.fonts.ready
@@ -72,7 +86,9 @@ async function capture(page, info, name, { board = false } = {}) {
           id: element.dataset.well, ...rect(element), od: rect(od),
           text: rect({ getBoundingClientRect: () => range.getBoundingClientRect() }),
           font: parseFloat(getComputedStyle(od).fontSize),
+          reading: od.textContent,
           color: getComputedStyle(od).color.match(/[\d.]+/g).slice(0, 3).map(Number),
+          background: getComputedStyle(element).backgroundColor.match(/[\d.]+/g).slice(0, 3).map(Number),
         }
       }),
     }
@@ -103,23 +119,29 @@ async function capture(page, info, name, { board = false } = {}) {
     }
   }
   const png = await page.screenshot({ path: info.outputPath(`${name}.png`), animations: 'disabled', fullPage: false })
+  // Preserve the exact browser evidence even if a subsequent pixel check fails.
+  await info.attach(`${name}-geometry`, { body: JSON.stringify(geometry), contentType: 'application/json' })
+  await info.attach(`${name}-image`, { body: png, contentType: 'image/png' })
   const bitmap = decodePng(png), sx = bitmap.width / geometry.viewport.width, sy = bitmap.height / geometry.viewport.height
   // Fractional physical dimensions may round either way in the screenshot
   // transport; the raster must still match the real 150% device scale.
   expect(Math.abs(bitmap.width - geometry.viewport.width * 1.5)).toBeLessThanOrEqual(0.5)
   expect(Math.abs(bitmap.height - geometry.viewport.height * 1.5)).toBeLessThanOrEqual(0.5)
   if (board) for (const box of geometry.wells) {
+    const missing = box.reading === '—'
+    // A completely blank two-pixel crop must never satisfy the ink count.
+    expect([box.background, box.background].filter(pixel =>
+      isPaintedPixel(pixel, box.color, box.background, missing)), `${box.id}: blank-crop negative control`).toHaveLength(0)
     let painted = 0
     for (let y = Math.max(0, Math.floor(box.text.top * sy)); y < Math.min(bitmap.height, Math.ceil(box.text.bottom * sy)); y++) {
       for (let x = Math.max(0, Math.floor(box.text.left * sx)); x < Math.min(bitmap.width, Math.ceil(box.text.right * sx)); x++) {
         const offset = (y * bitmap.width + x) * bitmap.channels
-        if (box.color.every((value, c) => Math.abs(bitmap.pixels[offset + c] - value) <= 35)) painted++
+        const pixel = [...bitmap.pixels.subarray(offset, offset + 3)]
+        if (isPaintedPixel(pixel, box.color, box.background, missing)) painted++
       }
     }
     expect(painted, `${box.id}: screenshot contains painted OD text`).toBeGreaterThanOrEqual(2)
   }
-  await info.attach(`${name}-geometry`, { body: JSON.stringify(geometry), contentType: 'application/json' })
-  await info.attach(`${name}-image`, { body: png, contentType: 'image/png' })
 }
 
 test.describe('150% display scaling and monitor work-area layouts', () => {

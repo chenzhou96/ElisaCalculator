@@ -360,12 +360,13 @@ async fn read_last_session(app: tauri::AppHandle) -> Result<Option<String>, Stri
 
 #[cfg(desktop)]
 fn fit_initial_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+  eprintln!("[window startup] querying monitor work area");
   let monitor = window.current_monitor().ok().flatten()
     .or_else(|| window.primary_monitor().ok().flatten())
     .ok_or_else(|| "无法读取当前显示器工作区".to_string())?;
   let area = monitor.work_area();
-  let inner = window.inner_size().map_err(|error| error.to_string())?;
-  let outer = window.outer_size().map_err(|error| error.to_string())?;
+  let inner = window.inner_size().map_err(|error| format!("inner_size: {error}"))?;
+  let outer = window.outer_size().map_err(|error| format!("outer_size: {error}"))?;
   let geometry = window_sizing::startup_geometry(
     window_sizing::WorkArea {
       x: area.position.x,
@@ -379,14 +380,22 @@ fn fit_initial_window(window: &tauri::WebviewWindow) -> Result<(), String> {
       height: outer.height.saturating_sub(inner.height),
     },
   ).ok_or_else(|| "显示器工作区无法容纳应用窗口".to_string())?;
+  eprintln!(
+    "[window startup] work_area={:?}, scale={}, frame={:?}, geometry={geometry:?}",
+    area, monitor.scale_factor(),
+    window_sizing::FrameSize {
+      width: outer.width.saturating_sub(inner.width),
+      height: outer.height.saturating_sub(inner.height),
+    },
+  );
   // Lower the minimum before resizing: a 600 logical-pixel minimum is 900 physical pixels at 150%.
   // Physical sizes avoid a second DPI conversion when centering on an offset monitor.
   window.set_min_size(Some(tauri::PhysicalSize::new(geometry.min_width, geometry.min_height)))
-    .map_err(|error| error.to_string())?;
+    .map_err(|error| format!("set_min_size: {error}"))?;
   window.set_size(tauri::PhysicalSize::new(geometry.width, geometry.height))
-    .map_err(|error| error.to_string())?;
+    .map_err(|error| format!("set_size: {error}"))?;
   window.set_position(tauri::PhysicalPosition::new(geometry.x, geometry.y))
-    .map_err(|error| error.to_string())?;
+    .map_err(|error| format!("set_position: {error}"))?;
   Ok(())
 }
 
@@ -404,14 +413,28 @@ pub fn run() {
       }
       #[cfg(desktop)]
       if let Some(window) = app.get_webview_window("main") {
-        if let Err(error) = fit_initial_window(&window) {
-          log::warn!("[window startup] {error}; 使用最大化窗口回退");
-          if let Err(error) = window.maximize() {
-            log::warn!("[window startup] 无法最大化窗口: {error}");
+        // Return from setup before dispatching native resize/show operations. On Tauri 2.10.3,
+        // off-main-thread getters wait for the running event loop; setters are queued in order.
+        // This avoids synchronous Win32/WebView callbacks re-entering the setup hook.
+        std::thread::Builder::new().name("window-startup".into()).spawn(move || {
+          if let Err(error) = fit_initial_window(&window) {
+            eprintln!("[window startup] {error}; 使用最大化窗口回退");
+            if let Err(error) = window.maximize() {
+              eprintln!("[window startup] 无法最大化窗口: {error}");
+            }
           }
-        }
-        // The configured window stays hidden until its native size/position has been fitted.
-        window.show()?;
+          // The configured window stays hidden until its native size/position has been fitted.
+          eprintln!("[window startup] queueing show");
+          if let Err(error) = window.show() {
+            eprintln!("[window startup] 无法显示窗口: {error}");
+            return;
+          }
+          // Getter replies also confirm that the preceding queued native operations ran.
+          eprintln!(
+            "[window startup] visible={:?}, title={:?}, inner_size={:?}",
+            window.is_visible(), window.title(), window.inner_size(),
+          );
+        })?;
       }
       Ok(())
     })
