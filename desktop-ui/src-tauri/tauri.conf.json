@@ -13,9 +13,11 @@
     "windows": [
       {
         "title": "ELISA Calculator",
-        "width": 1360,
-        "height": 900,
-        "visible": false,
+        "width": 800,
+        "height": 420,
+        "visible": true,
+        "center": true,
+        "preventOverflow": true,
         "resizable": true,
         "fullscreen": false,
         "decorations": false,

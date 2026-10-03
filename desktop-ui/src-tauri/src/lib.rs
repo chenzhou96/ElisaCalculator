@@ -361,9 +361,14 @@ async fn read_last_session(app: tauri::AppHandle) -> Result<Option<String>, Stri
 #[cfg(desktop)]
 fn fit_initial_window(window: &tauri::WebviewWindow) -> Result<(), String> {
   eprintln!("[window startup] querying monitor work area");
-  let monitor = window.current_monitor().ok().flatten()
-    .or_else(|| window.primary_monitor().ok().flatten())
-    .ok_or_else(|| "无法读取当前显示器工作区".to_string())?;
+  let monitor = match window.current_monitor() {
+    Ok(Some(monitor)) => monitor,
+    current => {
+      eprintln!("[window startup] current_monitor={current:?}; trying primary monitor");
+      window.primary_monitor().map_err(|error| format!("primary_monitor: {error}"))?
+        .ok_or_else(|| "无法读取当前显示器工作区".to_string())?
+    },
+  };
   let area = monitor.work_area();
   let inner = window.inner_size().map_err(|error| format!("inner_size: {error}"))?;
   let outer = window.outer_size().map_err(|error| format!("outer_size: {error}"))?;
@@ -411,33 +416,33 @@ pub fn run() {
             .build(),
         )?;
       }
+      Ok(())
+    })
+    .build(tauri::generate_context!())
+    .expect("error while building tauri application")
+    .run(|app, event| {
       #[cfg(desktop)]
-      if let Some(window) = app.get_webview_window("main") {
-        // Return from setup before dispatching native resize/show operations. On Tauri 2.10.3,
-        // off-main-thread getters wait for the running event loop; setters are queued in order.
-        // This avoids synchronous Win32/WebView callbacks re-entering the setup hook.
-        std::thread::Builder::new().name("window-startup".into()).spawn(move || {
-          if let Err(error) = fit_initial_window(&window) {
+      if matches!(event, tauri::RunEvent::Ready) {
+        // Ready is delivered after configured windows and the setup hook have completed.
+        // Stay on the runtime's main thread so sizing uses direct native dispatch, not a
+        // detached setup worker's event-loop proxy. Creation already uses preventOverflow.
+        eprintln!("[window startup] Ready: fitting main window on the event-loop thread");
+        if let Some(window) = app.get_webview_window("main") {
+          let fit = fit_initial_window(&window);
+          if let Err(error) = &fit {
             eprintln!("[window startup] {error}; 使用最大化窗口回退");
             if let Err(error) = window.maximize() {
               eprintln!("[window startup] 无法最大化窗口: {error}");
             }
           }
-          // The configured window stays hidden until its native size/position has been fitted.
-          eprintln!("[window startup] queueing show");
-          if let Err(error) = window.show() {
-            eprintln!("[window startup] 无法显示窗口: {error}");
-            return;
-          }
-          // Getter replies also confirm that the preceding queued native operations ran.
           eprintln!(
             "[window startup] visible={:?}, title={:?}, inner_size={:?}",
             window.is_visible(), window.title(), window.inner_size(),
           );
-        })?;
+          eprintln!("[window startup result] {}", serde_json::json!({ "fit_ok": fit.is_ok() }));
+        } else {
+          eprintln!("[window startup] Ready: main window is missing");
+        }
       }
-      Ok(())
-    })
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    });
 }

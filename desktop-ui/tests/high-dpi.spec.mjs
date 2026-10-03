@@ -63,6 +63,13 @@ function isPaintedPixel(pixel, foreground, background, missing) {
 async function capture(page, info, name, { board = false } = {}) {
   await page.evaluate(async () => {
     await document.fonts.ready
+    await new Promise(resolve => requestAnimationFrame(resolve))
+    // screenshot({animations:'disabled'}) finishes finite CSS transitions.
+    // Finish them before measuring too, so theme colors and pixels describe
+    // the same final frame rather than an intermediate background blend.
+    for (const animation of document.getAnimations()) {
+      if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) animation.finish()
+    }
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
   })
   const geometry = await page.evaluate(() => {

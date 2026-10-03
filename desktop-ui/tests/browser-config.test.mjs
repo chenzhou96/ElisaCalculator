@@ -35,3 +35,24 @@ test('Windows job initializes runner-specific paths at runtime rather than unava
   assert.match(source,/Join-Path \$env:RUNNER_TEMP 'elisa-matplotlib'/)
   assert.match(source,/"MPLCONFIGDIR=\$plotCache" >> \$env:GITHUB_ENV/)
 })
+
+test('native startup is initially visible and bounded without requiring an early show message', () => {
+  const config = JSON.parse(readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8'))
+  const window = config.app.windows[0]
+  assert.equal(window.visible, true)
+  assert.equal(window.center, true)
+  assert.equal(window.preventOverflow, true)
+  assert.deepEqual([window.width, window.height, window.minWidth, window.minHeight], [800, 420, 800, 420])
+})
+
+test('native fitting waits for Ready after setup and stays on the runtime event-loop callback', () => {
+  const source = readFileSync(new URL('../src-tauri/src/lib.rs', import.meta.url), 'utf8')
+  const setup = source.split('.setup(|app|')[1]?.split('.build(tauri::generate_context!())')[0] ?? ''
+  assert.ok(setup)
+  assert.doesNotMatch(setup, /fit_initial_window|window-startup|\.show\(/)
+  const ready = source.split('.run(|app, event|')[1] ?? ''
+  assert.match(ready, /matches!\(event, tauri::RunEvent::Ready\)/)
+  assert.match(ready, /get_webview_window\("main"\)/)
+  assert.match(ready, /fit_initial_window\(&window\)/)
+  assert.doesNotMatch(ready, /std::thread|spawn\(/)
+})

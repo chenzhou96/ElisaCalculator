@@ -167,15 +167,27 @@ minimum height forced 900 physical pixels, so a requested 1366×768 physical
 window could not fit. Interactive history/editing acceptance is being continued
 separately and is not claimed as complete here.
 
-Version 0.3.1 fits the initially hidden window to the current monitor's physical
-work area, reserves the measured native frame and eight physical pixels at each
-edge, sets a bounded 800×420 logical minimum, then shows it. Roomy monitors retain
+Version 0.3.1 creates a visible, centered window with native overflow prevention
+and a small initial workspace. After configured-window creation and setup have
+completed, the main-thread `RunEvent::Ready` callback fits the current monitor's
+physical work area, reserves the measured native frame and eight physical pixels
+at each edge, and sets a bounded 800×420 logical minimum. Roomy monitors retain
 the preferred 1360×900 logical workspace. If monitor/sizing queries fail, startup
-attempts maximization before revealing the window. Sixteen pure Rust cases cover
+attempts maximization; the hosted smoke gate requires a successful fit as well as
+a visible, responsive, correctly titled window within its monitor's work area,
+so this fallback cannot silently count as validated sizing. Sixteen pure Rust cases cover
 100%/150%/200%, fractional scales, taskbar and secondary-monitor offsets, frames,
 and small/invalid areas. The short-height CSS retains all 96 wells and readable OD
 text, uses an accessible icon rail, and scrolls the right editor internally.
 Scientific calculations, native history paths, and record schema are unchanged.
+
+The native bounds probe accounts for the documented
+[GetWindowRect DPI virtualization](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowrect)
+by temporarily setting only its measuring thread's
+[DPI awareness context](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setthreaddpiawarenesscontext),
+then restoring it in `finally`. It does not alter monitor scaling, application
+preferences, or global OS settings. The probe's newest APIs require Windows 10
+1607, below the Windows 10 22H2 compatibility target.
 
 Hosted browser regressions exercise 150% scaling at short logical viewport
 sizes, verify actual OD screenshot pixels and all well bounds, and check editor,
