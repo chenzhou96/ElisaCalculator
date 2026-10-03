@@ -1,4 +1,5 @@
 import argparse
+from copy import deepcopy
 import json
 import math
 import re
@@ -7,6 +8,7 @@ import sys
 import numpy as np
 
 from .io.readers import preview_dataframe_text, read_text_file_with_fallbacks
+from .core.normalization import renormalize_report
 from .services.workflow import (
     calculate_workflow_report,
     export_workflow_outputs,
@@ -209,6 +211,29 @@ def handle_normalize_text_request(request):
     }
 
 
+def handle_renormalize_request(request):
+    """Reference-only edits of a stored RunResponse; no parse, fit or plot work."""
+    original = request.get('run_response')
+    if original is not None and not isinstance(original, dict):
+        return {'ok': False, 'error': 'run_response must be an object'}
+    report = original.get('report') if original is not None else request.get('report')
+    try:
+        report = renormalize_report(report, request.get('reference_group'),
+                                    request.get('reference_assigned_value'))
+    except (ValueError, TypeError, KeyError, AttributeError, OverflowError) as exc:
+        return {'ok': False, 'error': str(exc)}
+    response = deepcopy(original) if original is not None else {
+        'meta': report.get('metadata', {}).get('parse_metadata', {}),
+        'source_label': report.get('metadata', {}).get('source_label', 'Saved analysis'),
+        'encoding_used': report.get('metadata', {}).get('encoding_used'),
+        'removed_count': 0, 'previews': [], 'preview_warnings': [],
+    }
+    response.update(ok=True, error='', status_msg='Success', results=report['summary_rows'],
+                    report=report, output_dir=None, saved_files=[], export_error='',
+                    export_warnings=[], exports_skipped=True)
+    return _normalize_json_value(response)
+
+
 def handle_request(request):
     if not isinstance(request, dict):
         return {'ok': False, 'error': 'request must be a JSON object'}
@@ -219,6 +244,8 @@ def handle_request(request):
         return handle_parse_request(request)
     if command == 'run':
         return handle_run_request(request)
+    if command == 'renormalize':
+        return handle_renormalize_request(request)
     return {'ok': False, 'error': f'不支持的命令: {command}'}
 
 

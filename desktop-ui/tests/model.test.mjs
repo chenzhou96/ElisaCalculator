@@ -215,3 +215,45 @@ test('late portable record restore cannot replace newer edited inputs', () => {
   const workspace = {...state(), rawText: 'Stale record'}
   assert.equal(reducer(edited, {type: 'restore', request: 18, version: 6, workspace}), edited)
 })
+
+test('reference-only changes retain unrounded fits and later ratio responses cannot override changed data', () => {
+  const response = {...result, report:{...result.report, options:{...defaultOptions, reference_group:'Reference', reference_assigned_value:10}, summary_rows:[{Group:'Reference',LogEC50:-1.234567891},{Group:'Sample',LogEC50:-1.836627883}], metadata:{reference_fit_context:{schema:'elisa-reference-fit-context/1'}}}};
+  const before = state({result:response,version:12,resultOrigin:'reanalyzed'});
+  const pending = reducer(before,{type:'options',patch:{reference_group:'Sample',reference_assigned_value:7}});
+  assert.equal(pending.result,response);
+  assert.equal(pending.version,13);
+  assert.equal(pending.parsed,parsed);
+  assert.equal(pending.resultOrigin,'reanalyzed');
+  const normalized={...response, report:{...response.report, options:{...response.report.options,reference_group:'Sample',reference_assigned_value:7}}};
+  const done=reducer(pending,{type:'renormalized',version:13,response:normalized});
+  assert.equal(done.result,normalized);
+  assert.match(done.status,/未重新拟合/);
+  const edited=reducer(pending,{type:'options',patch:{fit_mode:'independent'}});
+  assert.equal(edited.result,null);
+  assert.equal(reducer(edited,{type:'renormalized',version:13,response:normalized}),edited);
+  assert.equal(before.options.reference_assigned_value,1);
+});
+
+test('failed reference changes keep original fitted response and restore truthful reference labels', () => {
+  const response={...result,report:{...result.report,options:{...defaultOptions,reference_group:'Reference',reference_assigned_value:10}}};
+  const pending=reducer(state({result:response,version:5}),{type:'options',patch:{reference_assigned_value:0}});
+  const failed=reducer(pending,{type:'reference-failed',version:6,error:'positive reference required'});
+  assert.equal(failed.result,response);
+  assert.equal(failed.options.reference_group,'Reference');
+  assert.equal(failed.options.reference_assigned_value,10);
+  assert.equal(failed.error,'positive reference required');
+  assert.match(failed.status,/已保留/);
+  assert.equal(reducer({...pending,version:7},{type:'reference-failed',version:6,error:'late'}).version,7);
+});
+
+test('complete snapshot restore retains historical result without fabricating a computation', () => {
+  const before=state({request:18,version:6,result});
+  const workspace={...state(),result,resultOrigin:'historical',recordSavedAt:'2026-10-03T09:00:00Z',compatibilityMessage:'',parsed};
+  const after=reducer(before,{type:'restore',request:18,version:6,workspace});
+  assert.equal(after.result,result);
+  assert.equal(after.resultOrigin,'historical');
+  assert.equal(after.recordSavedAt,'2026-10-03T09:00:00Z');
+  assert.equal(after.page,'results');
+  assert.equal(after.parsed,parsed);
+  assert.match(after.status,/未重新计算/);
+});

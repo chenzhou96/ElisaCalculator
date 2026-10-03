@@ -1,28 +1,35 @@
-# ELISA Calculator 0.2
+# ELISA Calculator 0.3
 
-本地桌面科研分析工作台：比较抗体/试剂的剂量–响应曲线及参比倍数，或用标准曲线反算未知样本。Tauri 2 + React/TypeScript 界面，Python/SciPy 计算引擎；数据留在本机。
+本地 96 孔板科研分析工作台：比较连续稀释组的剂量–响应曲线、EC50 和参比归一 X。Tauri 2 + React/TypeScript 界面，Python/SciPy 计算引擎；实验数据留在本机。
 
-窗口右上角的“夜间 / 日间”按钮或“视图 → 夜间模式”可切换配色；选择在本机保存，重启后恢复。切换配色不会清空输入、改变分析设置或重新计算结果。
+## 工作流
 
-## 96 孔板工作台
+粘贴 Excel 的 8×12 读数（保留空单元与 0）→ 选孔 → 设置比较曲线、空白或排除 → 预览每组独立梯度 → 点击“应用到选中孔”→ 直接“运行分析”。映射检查和解析预览都是可选入口。
 
-默认打开 8×12 孔板：粘贴 Excel 读数（含空单元）→ 单孔、多选、框选或整列选孔 → 分配曲线、标准、未知、空白或排除类型 → 预览各组独立稀释梯度 → 直接点击“运行分析”（自动检查并计算；错误自动定位与高亮）。撤销/重做和记录保存保留完整板图；“表格输入”继续支持原有工作流，两份原始输入分别保留，不自动转换。“检查孔位映射”和“解析预览”均为可选入口，计算前不需要额外确认。
+- 新分析只使用 96 孔板；待测样品也按连续稀释比较组处理，不再提供独立表格和标准曲线反算入口
+- 全部设置统一在孔板右侧“分析约定”，左侧不再重复显示“分析设置”
+- 选中已标记孔读取已有类型、组、起始量、倍数、方向和间隔；选中未分配孔恢复项目默认值。多选混合设置需明确替换，选择与编辑草稿不会写入孔板
+- “应用到选中孔”才保存标记和单孔 OD 草稿；已有标记覆盖须确认，取消不修改，撤销/重做保留完整操作
+- 结果页可更改成功拟合的参比组及正赋值，立即使用原始未舍入拟合与协方差重新归一，不重新拟合、不重新画图。例如参比 10X、样品 40X，改为样品 7X 后原参比为 1.75X
+- 读数、孔位标记、剂量、空白、复孔或模型变化使旧结果失效；选择、配色与仅参比归一变化不会丢弃拟合
 
-完整操作、无量纲剂量、空白和复孔约定见 [孔板工作台说明](docs/PLATE_WORKBENCH.md)。
+无量纲剂量允许任意有限正数，包括大于 1 的值，不解释为原液分数或物理浓度。已有绝对浓度须明确填写单位。共享/独立平台、空白作用域和复孔等权约定显式设置。非平行性、剂量范围、可辨识性、参比质量及条件置信区间警告保留；X 不是恒定生物效价的证明。
 
-## 科研工作流
+操作细节见 [孔板工作台](docs/PLATE_WORKBENCH.md)，模型和条件见 [科学说明](docs/SCIENTIFIC_MODEL.md)。示例均为软件验证合成数据。
 
-- **曲线比较**：CSV/TSV/文本粘贴 → 确认表头与列 → 选择 X 语义与拟合模式 → 选择参比及其 1X/10X 等赋值 → 查看结果、质量警告与曲线
-- **标准定量**：准备标准曲线 → 指定标准组 → 输入未知样本响应及稀释倍数 → 查看插值/范围检查及校正结果
-- X 支持原始浓度、log10 浓度，以及常用的 1–8 稀释序号。序号模式默认越大稀释越多，倍数可配；起始浓度未知时只给相对剂量，绝不伪造绝对浓度
-- 独立/共享平台拟合显式选择；空白和复孔处理显式设置
-- 图预览不依赖导出；输入或设置变化后旧结果失效
+## 自动保存与历史
 
-详细公式、适用假设与参比倍数解释见 [科学模型说明](docs/SCIENTIFIC_MODEL.md)。演示数据仅用于软件验证，不是实验结论。
+桌面应用在应用数据目录自动保存完整会话与独立分析快照，包括全部板图、输入、未舍入结果、拟合、曲线预览、配置和参比设置；使用原子落盘。原生窗口关闭前会等待保存，失败时保留窗口并显示错误和重试入口。临时导出缓存与持久历史分开。
 
-## 运行环境
+“分析历史”恢复完整计算快照，不调用 Python 重算，并标明“历史结果快照”；再次运行后标明重新分析状态。修改孔板或模型必须重新分析。便携“保存记录”生成 elisa-analysis/2 JSON，“恢复分析记录”也直接恢复经结构校验的 v2 结果。
 
-Python 3.10+、Node.js 24.15+（源码开发与测试要求；已验证 24.19，打包后的桌面版用户不需要 Node）；原生桌面还需要 Rust、平台 Tauri 系统依赖。Windows 打包需要 Visual Studio C++ Build Tools / Windows SDK。
+旧版 elisa-analysis/1 只恢复输入，不把其中旧结果当作可信新结果。旧版表格、标准反算、未知孔及稀释信息完整保留，并显示兼容性提示；不会自动改义或丢弃。旧表格只能历史查看/另存，重新分析请新建孔板；旧标准/未知孔须明确重标记后再比较。旧版科学导出 Analysis_Record.json 是审计文件，不是界面恢复记录。
+
+浏览器开发版使用本站 IndexedDB 的严格写入事务。隐私模式、清理站点数据或浏览器存储回收可能删除记录。重要实验仍应另存 JSON 到实验目录；自动保存不替代独立备份。
+
+## 运行与验证
+
+源码开发需要 Python 3.10+、Node.js 24.15+、Rust 和平台 Tauri 系统依赖。Windows installer 内置冻结 Python/SciPy bridge，用户不需要安装 Python、Node 或 Rust。Windows 10/11 x64 是兼容目标；具体最低版本及实际验证界限见 [Windows 验证](docs/WINDOWS_VALIDATION.md)。
 
 ```sh
 python -m pip install -r requirements.txt
@@ -31,58 +38,40 @@ npm ci
 npm run tauri:dev
 ```
 
-开发桌面版通过系统 `python` / Windows `py -3` 调用 Python；Windows release 构建执行 PyInstaller 脚本并优先使用内置 bridge executable，失败时才回退系统 Python。实际安装包需在 Windows 构建并验证，不能以网页构建替代。
-
-## 本地浏览器集成验证
-
-只用于开发，不是联网部署：
+本地浏览器验证显式启用真实 Python 适配器：
 
 ```sh
-cd desktop-ui
 VITE_ELISA_DEV_BRIDGE=1 npm run dev
 ```
 
-浏览器打开 http://127.0.0.1:1420。这个显式启用的开发适配器仅接受回环客户端、同源 JSON 请求，调用同一 Python 引擎；不会允许任意文件读取或任意命令。未启用适配器的普通浏览器不会伪造计算结果。Windows PowerShell 先执行 `$env:VITE_ELISA_DEV_BRIDGE='1'`。
-
-## 验证
+该适配器只接受回环同源 JSON，不允许任意文件或命令，未启用时不会伪造结果。数值输入支持四则运算和括号，例如 =1/20、=(2+3)*4；原始输入保留供审计。日间/夜间配色保存在本机，不影响计算。
 
 ```sh
 python -m unittest discover -s tests -v
 cd desktop-ui
 npm run build
 npm run lint
+npm test
+npm run test:integration
+npm run test:plate-science
+npm run test:e2e
 ```
 
-前端交互、端到端脚本见 `desktop-ui/tests/` 及 package.json 的测试命令。浏览器测试始终开启 Chromium sandbox。Ubuntu 24.04 的 GitHub Actions 使用 runner 已安装的稳定版 Chrome（`CHROMIUM_PATH=/opt/google/chrome/chrome`），避开自动选中 `/usr/bin/chromium` 后无法创建 sandbox 的情况；不修改 AppArmor、user namespace 或 sandbox 设置。该标准安装路径由 [Ubuntu 现有 AppArmor 配置](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md) 支持，runner 的 [预装软件清单](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md) 列有 Chrome。自定义 runner 需先提供可正常开启 sandbox 的浏览器；缺失时测试会明确失败，不会回退到禁用 sandbox。无可写用户目录的 CI 环境应把 `XDG_CACHE_HOME`、`MPLCONFIGDIR` 设置到可写临时目录。
+浏览器 CI 始终使用 Chromium sandbox；Ubuntu 24.04 采用 runner 已安装 Chrome 的显式路径 /opt/google/chrome/chrome，不修改 AppArmor、user namespace 或安全设置。测试通过仅说明覆盖的软件行为，不能代替实验方法验证。浏览器/DOM 测试不能代替真实 Windows 安装验收。
 
-测试覆盖应包括真值曲线、稀释方向、参比赋值、反算往返、非法/非有限输入、范围与不确定性、旧结果失效、失败导出及常见桌面窗口布局。测试通过仅证明所覆盖的软件行为，不等于实验方法已验证。
+## 导出与 Windows 包
 
-## 导出与分析记录
-
-导出写入平台应用缓存目录下唯一的分析目录，路径显示在结果中：
-
-- `EC50_Summary.csv`：曲线摘要
-- `Unknown_Samples.csv`：未知样本结果（存在时）
-- `Input_Audit.csv`：原始及处理数据追踪
-- `Analysis_Record.json`：带版本、配置、完整报告与导出警告的规范记录
-- 分组 PNG 与总览 PNG
-
-界面“保存记录”生成的 `elisa-analysis/1` JSON 可用“恢复分析记录”恢复输入并重新计算。缓存中的 `Analysis_Record.json` 是完整科学审计格式，用于审阅或脚本复算，并不是界面状态文件。
-
-请把需要长期保存的记录复制到实验项目目录。系统缓存不是长期存档位置。CSV 中可能被电子表格当成公式的用户文本会被转义；JSON 保留原值。
-
-## Windows 发布
+可选导出写入独立应用缓存目录：EC50_Summary.csv、Input_Audit.csv、完整 Analysis_Record.json、分组与总览 PNG。路径与实际保存失败明确显示。仅改变参比后旧导出不代表新的归一结果，新的完整快照仍自动保存；如需新 CSV/PNG，重新运行或保存新的分析记录。CSV 公式样式用户文本会安全转义，JSON 保留原文。
 
 ```sh
-python -m pip install -r requirements-build.txt
+python -m pip install -r desktop-ui/scripts/requirements-windows-build.txt
 cd desktop-ui
+npm ci
 npm run tauri:build
 ```
 
-内置 bridge 由 beforeBuildCommand 自动构建。构建会优先使用 BRIDGE_PYTHON_HOME 指定环境，否则自动检测 Python，不再依赖个人 D 盘路径。桥接必须使用 console 模式保留 JSON 标准输入/输出；Rust 的 CREATE_NO_WINDOW 负责隐藏窗口（[PyInstaller 说明](https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html#sys-stdin-sys-stdout-and-sys-stderr-in-noconsole-windowed-applications-windows-only)）。离线安装工具准备脚本保留。发布前应在没有开发 Python 环境的干净 Windows 用户账户验证安装、启动、计算、中文输入、导出和卸载。源码更新不代表已经生成可分发安装包。
+GitHub Actions 构建包含冻结 bridge 的 Windows NSIS 安装包，并提供 commit、依赖清单和 SHA-256。安装器包含离线 WebView2 安装器，可能较大；不把源码构建成功称为已实际安装成功。真实 Win11 与以后 Win10 验收必须按 Windows 文档逐项记录。
 
 ## 结构
 
-`elisa_calculator/core` 科学计算；`io` 解析/导出；`services` 流程；`bridge.py` JSON 协议；`visualization` 预览和导出共用绘图；`desktop-ui` React 界面与 Rust 原生桥接；`tests` 回归测试。
-
-数值输入支持四则运算和括号，例如 `=1/20`、`=(2+3)*4`；按 Enter 或离开输入框显示计算值。未知样品的重复 OD 用分号分隔；粘贴表格及孔板读数也支持表达式。孔板的无量纲剂量允许任意正数，包括大于 1 的起始值；中点相对值按参考赋值 × 参考 EC50 / 样品 EC50 计算，不将剂量解释为原液分数。
+elisa_calculator/core 为科学计算与无重拟合归一；io 为解析/导出；bridge.py 为 JSON 协议；desktop-ui 为 React、原生 Rust 桥接及持久快照。后端保留旧科学接口供历史兼容与回归核对，当前桌面新建工作流只提供孔板比较。

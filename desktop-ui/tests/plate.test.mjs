@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {createPlate, WELL_IDS, ROWS, previewPaste, applyPaste, numericOD, rectangleIds, selectWells, assignWells, compilePlate, plateExample, validatePlate} from '../src/workbench/plate.ts'
+import {createPlate, WELL_IDS, ROWS, previewPaste, applyPaste, numericOD, rectangleIds, selectWells, assignWells, compilePlate, plateExample, validatePlate, DEFAULT_ASSIGNMENT, NEW_WELL_KINDS, readPlateSelection, previewPlateAssignment, legacyPlateWells} from '../src/workbench/plate.ts'
 import {initialWorkspace, defaultOptions, reducer} from '../src/workbench/model.ts'
 import {serializeRecord, parseRecord} from '../src/workbench/record.ts'
 const assignment={kind:'comparison',group:'R',start:128,factor:2,direction:'decreasing',axis:'column',spacing:'physical',dilution:1}
@@ -123,4 +123,58 @@ test('plate parse preserves a non-first table X column for later table parsing a
  s=reducer(s,{type:'parsed',request:1,version:s.version,response:{ok:true,meta:{columns:['Dose','Reference · 列 1 · 复孔 1']}}})
  assert.equal(s.xColumn,'CustomDose');assert.equal(parseRecord(serializeRecord(s)).xColumn,'CustomDose')
  s=reducer(s,{type:'view',view:'table'});s=reducer(s,{type:'begin',busy:'parse',request:2});s=reducer(s,{type:'parsed',request:2,version:s.version,response:{ok:true,meta:{columns:['Reference','CustomDose']}}});assert.equal(s.xColumn,'CustomDose')
+})
+
+
+test('selection editor reads saved group start and conventions without writes or result invalidation',()=>{
+ let p=assignWells(createPlate(),rectangleIds('A1','H2'),assignment)
+ p=selectWells(p,'D1','single')
+ const before=JSON.stringify(p), selected=readPlateSelection(p)
+ assert.equal(selected.status,'uniform');assert.deepEqual(selected.assignment,assignment)
+ assert.equal(selected.assignment.start,128);assert.equal(od(p,'D1').dose,16)
+ assert.deepEqual(selected.gradientIds,rectangleIds('A1','H2'))
+ assert.deepEqual(previewPlateAssignment(p,selected.assignment).wells,p.wells)
+ assert.equal(JSON.stringify(p),before)
+ const s={...structuredClone(initialWorkspace),plate:p,result:{ok:true},version:12}
+ const viewed=reducer(s,{type:'plate-selection',selected:['H2'],anchor:'H2'})
+ assert.equal(viewed.version,12);assert.equal(viewed.result,s.result);assert.deepEqual(viewed.plate.wells,p.wells)
+})
+test('unassigned selection restores defaults and mixed selections never borrow the first well settings',()=>{
+ let p=assignWells(createPlate(),['A1','B1'],{...assignment,group:'First',start:256,factor:4,axis:'row',spacing:'compact',direction:'increasing'})
+ p=selectWells(p,'E1','single');assert.equal(readPlateSelection(p).status,'unassigned');assert.deepEqual(readPlateSelection(p).assignment,DEFAULT_ASSIGNMENT)
+ p=selectWells(p,'A1','toggle');assert.equal(readPlateSelection(p).status,'mixed');assert.deepEqual(readPlateSelection(p).assignment,DEFAULT_ASSIGNMENT)
+ p=selectWells(p,'B1','single');assert.equal(readPlateSelection(p).assignment.group,'First');assert.equal(readPlateSelection(p).assignment.factor,4)
+})
+test('subset preview and application preserve physical and compact group coordinates and audit doses',()=>{
+ for(const spacing of ['physical','compact']){
+  const ids=['A1','B1','D1','E1','F1','G1','H1']
+  let p=assignWells(createPlate(),ids,{...assignment,spacing})
+  p=selectWells(p,'D1','single');const saved=readPlateSelection(p).assignment,before=JSON.stringify(p)
+  const rename=previewPlateAssignment(p,{...saved,group:'Renamed'})
+  assert.equal(od(rename,'D1').dose,spacing==='physical'?16:32)
+  assert.equal(od(rename,'A1').group,'R');assert.equal(od(rename,'D1').group,'Renamed')
+  const renameHalf=previewPlateAssignment(rename,{...readPlateSelection(rename).assignment,start:64})
+  assert.equal(od(renameHalf,'D1').dose,spacing==='physical'?8:16)
+  const half=previewPlateAssignment(p,{...saved,start:64})
+  assert.equal(od(half,'D1').dose,spacing==='physical'?8:16)
+  assert.equal(od(half,'A1').dose,128);assert.equal(JSON.stringify(p),before)
+  od(p,'D1').dose=17.25;assert.equal(od(previewPlateAssignment(p,{...saved,group:'Audit'}),'D1').dose,17.25)
+ }
+})
+test('mixed explicit replacement rebases selected wells while legacy wells remain visible until reassigned',()=>{
+ let p=assignWells(createPlate(),['A1','B1'],{...DEFAULT_ASSIGNMENT})
+ p={...p,selected:['B1','B2']}
+ assert.equal(readPlateSelection(p).status,'mixed')
+ const unified=previewPlateAssignment(p,{...DEFAULT_ASSIGNMENT,group:'Unified'})
+ assert.equal(od(unified,'B1').dose,1);assert.equal(od(unified,'B2').dose,1)
+ const old=plateExample('standard_curve'),before=JSON.stringify(old)
+ assert.ok(legacyPlateWells(old).length);assert.deepEqual(NEW_WELL_KINDS,['comparison','blank','excluded','unassigned'])
+ const compiled=compilePlate(old,{...options,workflow:'comparative',reference_group:'Standard'})
+ assert.equal(compiled.ok,false);assert.match(compiled.errors.join(),/旧版标准.*明确重标记/)
+ assert.equal(JSON.stringify(old),before);assert.equal(od(old,'A3').dilution,5)
+ const selected=selectWells(old,'B1','single'),editor=readPlateSelection(selected)
+ assert.equal(editor.assignment.kind,'standard');assert.equal(editor.assignment.start,128)
+ const converted=previewPlateAssignment(selected,{...editor.assignment,kind:'comparison'})
+ assert.equal(od(converted,'B1').dose,64);assert.equal(od(converted,'B1').raw,od(old,'B1').raw)
+ assert.equal(legacyPlateWells(converted).length,legacyPlateWells(old).length-1)
 })

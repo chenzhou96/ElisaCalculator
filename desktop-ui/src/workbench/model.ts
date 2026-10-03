@@ -48,6 +48,9 @@ export interface Workspace {
   saveOutputs: boolean;
   parsed: ParseResponse | null;
   result: RunResponse | null;
+  resultOrigin: "historical" | "reanalyzed" | null;
+  recordSavedAt: string | null;
+  compatibilityMessage: string;
   error: string;
   version: number;
   request: number | null;
@@ -71,6 +74,9 @@ export const initialWorkspace: Workspace = {
   saveOutputs: false,
   parsed: null,
   result: null,
+  resultOrigin: null,
+  recordSavedAt: null,
+  compatibilityMessage: "",
   error: "",
   version: 0,
   request: null,
@@ -115,7 +121,7 @@ export type Action =
         | "replicateText"
         | "unknowns"
         | "saveOutputs"
-      > & Partial<Pick<Workspace, "plate" | "inputView" | "viewOptions">>;
+      > & Partial<Pick<Workspace, "plate" | "inputView" | "viewOptions" | "result" | "parsed" | "resultOrigin" | "recordSavedAt" | "compatibilityMessage">>;
     }
   | { type: "begin"; request: number; busy: Workspace["busy"] }
   | {
@@ -125,6 +131,8 @@ export type Action =
       response: ParseResponse;
     }
   | { type: "ran"; request: number; version: number; response: RunResponse }
+  | { type: "renormalized"; version: number; response: RunResponse }
+  | { type: "reference-failed"; version: number; error: string }
   | {
       type: "loaded";
       request: number;
@@ -140,6 +148,8 @@ function changed(state: Workspace, clearParsed = false): Workspace {
     ...state,
     version: state.version + 1,
     result: null,
+    resultOrigin: null,
+    recordSavedAt: null,
     parsed: clearParsed ? null : state.parsed,
     error: "",
     status: state.result ? "输入已更改，请重新计算" : "输入待检查",
@@ -182,12 +192,21 @@ export function reducer(state: Workspace, action: Action): Workspace {
         ),
         ...action.patch,
       };
-    case "options":
+    case "options": {
+      const referenceOnly = Object.keys(action.patch).length > 0 && Object.keys(action.patch).every(key => key === "reference_group" || key === "reference_assigned_value");
+      if (referenceOnly && state.result?.ok && state.result.report?.options?.workflow === "comparative") {
+        return {...state, options: {...state.options, ...action.patch}, version: state.version + 1, error: "", status: "参比归一更新中 · 保留已有拟合"};
+      }
       return {
         ...changed(state, state.inputView === "plate"),
         options: { ...state.options, ...action.patch },
         ...(state.inputView === "plate" ? {platePast: [...state.platePast.slice(-39), {plate: state.plate, options: state.options}], plateFuture: []} : {}),
       };
+    }
+    case "reference-failed":
+      return action.version === state.version && state.result?.report?.options ? {...state, options: {...state.options, reference_group: state.result.report.options.reference_group, reference_assigned_value: state.result.report.options.reference_assigned_value}, error: action.error, status: "参比更新未应用 · 原有拟合与归一已保留"} : state;
+    case "renormalized":
+      return action.version === state.version && state.result?.ok ? {...state, result: action.response, error: "", status: "参比归一已更新 · 未重新拟合"} : state;
     case "restore":
       return current(state, action)
         ? {
@@ -199,7 +218,13 @@ export function reducer(state: Workspace, action: Action): Workspace {
             platePast: [],
             plateFuture: [],
             version: state.version + 1,
-            status: "分析记录已恢复，请重新解析和计算",
+            result: action.workspace.result ?? null,
+            parsed: action.workspace.parsed ?? null,
+            resultOrigin: action.workspace.resultOrigin ?? null,
+            recordSavedAt: action.workspace.recordSavedAt ?? null,
+            compatibilityMessage: action.workspace.compatibilityMessage ?? "",
+            page: action.workspace.result?.report ? "results" : "data",
+            status: action.workspace.result?.report ? "历史结果快照已恢复 · 未重新计算" : "分析输入已恢复 · 尚无可信计算结果",
           }
         : state;
     case "reset":
@@ -286,6 +311,8 @@ export function reducer(state: Workspace, action: Action): Workspace {
         ? {
             ...state,
             result: action.response,
+            resultOrigin: action.response.ok ? "reanalyzed" : null,
+            recordSavedAt: null,
             error: action.response.ok
               ? ""
               : (action.response.error ?? "计算失败"),

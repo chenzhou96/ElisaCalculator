@@ -22,7 +22,7 @@ React frontend sends JSON through Tauri Rust command `run_bridge` to the Python 
 - `services/workflow.py`: staged orchestration, with injection points used in tests
 - `bridge.py`: parse/run/normalize request handling and JSON-safe serialization
 - `visualization/plotting.py`: shared in-memory previews and file rendering
-- `desktop-ui/src/workbench`: compact two-workflow frontend and versioned input/result state
+- `desktop-ui/src/workbench`: compact plate-only comparative frontend, immutable fit normalization and versioned input/result snapshots
 - `tests`: known-truth scientific, independent-oracle, failure-path and export regression tests
 
 ## Scientific invariants
@@ -39,6 +39,6 @@ Blank corrections, replicate aggregation, and unknown dilution correction must b
 
 ## Engineering invariants
 
-Every relevant input/settings change invalidates prior results. Asynchronous responses must match input version and request ID. Native busy state also blocks file input. Export status reflects files actually written and warnings, not just directory creation. Previews work without persistent export. Durable analysis records can be saved separately from temporary cache outputs.
+Every data/model change invalidates prior results. Reference-only changes recompute normalization from pristine unrounded fit/covariance without refitting or clearing fit/plots. Selection and editor drafts are read-only until Apply. Asynchronous responses must match input version and request ID. Native busy state also blocks file input. Export status reflects files actually written and warnings, not just directory creation. Previews work without persistent export. Durable schema2 analysis records live in app data separately from temporary cache outputs. History/session restore recalls validated complete fits without rerunning Python. Legacy schema1 only restores inputs. Recovery errors must never silently overwrite old session data; native close locks changes and waits for durable saves, preserving the window on failure.
 
-Do not commit generated artifacts, dependency folders, screenshots or .qa. Do not claim Windows installer verification from web builds. Never push, publish or merge unless separately authorized.
+Do not commit generated artifacts, dependency folders, screenshots or .qa. Do not claim Windows installer verification from web builds. Source/tests/docs push requires authorization; the current user authorizes syncing requested project updates to the work branch after checks. Never force push, merge main or deploy without their specific approval.

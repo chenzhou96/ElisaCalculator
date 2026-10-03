@@ -1,17 +1,22 @@
-import { useState } from "react";
-import type { Workspace } from "./model";
+import { useState, type Dispatch } from "react";
+import type { Action, Workspace } from "./model";
 import { formatNumber as fmt } from "./model";
-import { Card, Empty, Pager } from "./Primitives";
+import { Card, Empty, Pager, Field } from "./Primitives";
 import type { SummaryRow } from "./types";
+import NumericInput from "./NumericInput";
 
 export default function ResultsPanel({
   state,
   onSelect,
   selected,
+  dispatch,
+  normalizationPending = false,
 }: {
   state: Workspace;
   onSelect: (group: string) => void;
   selected: string;
+  dispatch: Dispatch<Action>;
+  normalizationPending?: boolean;
 }) {
   const [page, setPage] = useState(0);
   const [tab, setTab] = useState<"unknown" | "curves">("unknown");
@@ -20,10 +25,11 @@ export default function ResultsPanel({
   if (!rows.length)
     return (
       <Empty title="结果还未生成">
-        完成数据预览与分析设置，然后点击“运行分析”
+        完成孔板标记与右侧分析约定，然后点击“运行分析”
       </Empty>
     );
   const dimensionless = state.result?.report?.options?.dose_basis === "dimensionless";
+  const supportsReferenceEdit = (state.result?.report?.metadata?.reference_fit_context as {schema?: string} | undefined)?.schema === "elisa-reference-fit-context/1";
   const standard = state.options.workflow === "standard_curve";
   const showUnknown = standard && tab === "unknown";
   const count = showUnknown ? unknowns.length : rows.length;
@@ -33,6 +39,12 @@ export default function ResultsPanel({
     unknowns.filter((row) => row.Warning).length;
   return (
     <div className="results-layout">
+      {state.resultOrigin === "historical" && <div className="notice warning">历史结果快照{state.recordSavedAt ? ` · ${state.recordSavedAt}` : ""} · 恢复时未重新计算</div>}
+      {!standard && <div className="reference-controls">
+        <Field label="结果参比组"><select value={state.options.reference_group ?? ""} disabled={!supportsReferenceEdit || !!state.busy} onChange={event => dispatch({type: "options", patch: {reference_group: event.target.value || null}})}>{rows.filter(row => row.Status === "Success" && Number.isFinite(row.LogEC50)).map(row => <option key={row.Group} value={row.Group}>{row.Group}</option>)}</select></Field>
+        <Field label="结果参比赋值（X）"><NumericInput value={state.options.reference_assigned_value} disabled={!supportsReferenceEdit || !!state.busy} onValueChange={value => dispatch({type: "options", patch: {reference_assigned_value: value ?? NaN}})} /></Field>
+        <p role="status">{normalizationPending ? "正在更新参比归一 · 拟合参数保持不变" : supportsReferenceEdit ? "修改参比立即归一，不重新拟合" : "旧版快照缺少原始协方差；需重新分析后才能修改参比"}</p>
+      </div>}
       <div className="metric-grid">
         <div className="metric">
           <span>{standard ? "标准曲线" : "分析曲线"}</span>
@@ -201,10 +213,10 @@ export default function ResultsPanel({
                         <small>{row.EC50_unit}</small>
                       </td>
                       <td>{fmt(row.EC50_step)}</td>
-                      <td>{fmt(row.EC50_ratio)}</td>
+                      <td>{normalizationPending ? "更新中" : fmt(row.EC50_ratio)}</td>
                       <td className="value-cell">
-                        {fmt(dimensionless ? row.Normalized_midpoint_X : row.Relative_stock_potency_X)}
-                        {(dimensionless ? row.Normalized_midpoint_X : row.Relative_stock_potency_X) != null ? " X" : ""}
+                        {normalizationPending ? "更新中" : fmt(dimensionless ? row.Normalized_midpoint_X : row.Relative_stock_potency_X)}
+                        {!normalizationPending && (dimensionless ? row.Normalized_midpoint_X : row.Relative_stock_potency_X) != null ? " X" : ""}
                       </td>
                       <td>{fmt(row.R2, 4)}</td>
                       <td>

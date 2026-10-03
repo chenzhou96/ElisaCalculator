@@ -4,7 +4,7 @@ $repoRoot = (Resolve-Path (Join-Path $projectRoot '..')).Path
 $bridgeEntry = Join-Path $PSScriptRoot 'bridge_entry.py'
 $outDir = Join-Path $projectRoot 'src-tauri\resources\bridge'
 $buildDir = Join-Path $projectRoot 'src-tauri\target\pyinstaller'
-$requirementsFile = Join-Path $repoRoot 'requirements-build.txt'
+$requirementsFile = Join-Path $PSScriptRoot 'requirements-windows-build.txt'
 
 # Prefer an explicitly selected environment; otherwise resolve a real Python.
 # No developer-machine drive or conda directory is assumed.
@@ -24,10 +24,17 @@ if (!(Test-Path $bridgeEntry)) { throw "Bridge entry not found: $bridgeEntry" }
 if (!(Test-Path $requirementsFile)) { throw "Missing requirements: $requirementsFile" }
 
 Write-Host "Using Python: $pythonExe"
+# Avoid nested native-argument quotes so Windows PowerShell 5.1 works too.
+$interpreterInfo = @(& $pythonExe -c 'import platform, struct, sys; print(sys.version_info.major, sys.version_info.minor, struct.calcsize(chr(80)) * 8, platform.machine())')
+if ($LASTEXITCODE -ne 0 -or $interpreterInfo.Count -ne 1 -or $interpreterInfo[0] -notmatch '^3 12 64 (AMD64|x86_64)$') {
+  throw 'Windows release bridge requires x64 CPython 3.12.'
+}
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
-& $pythonExe -m pip install -r $requirementsFile
+& $pythonExe -m pip install --only-binary=:all: -r $requirementsFile
 if ($LASTEXITCODE -ne 0) { throw 'Bridge dependency installation failed.' }
+& $pythonExe -m pip check
+if ($LASTEXITCODE -ne 0) { throw 'Bridge dependency compatibility check failed.' }
 
 # JSON bridge MUST retain stdin/stdout. --windowed sets these streams to None.
 # Rust launches this console executable with CREATE_NO_WINDOW, avoiding flashes.

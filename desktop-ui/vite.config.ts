@@ -23,15 +23,17 @@ function localScientificBridge(): Plugin {
         let tooLarge = false
         req.on('data', (chunk: Buffer) => {
           body += chunk.toString('utf8')
-          if (Buffer.byteLength(body) > 2_000_000) { tooLarge = true; req.destroy() }
+          if (Buffer.byteLength(body) > 32_000_000) { tooLarge = true; req.destroy() }
         })
         req.on('end', () => {
           if (tooLarge) return
           let payload: Record<string, unknown>
           try {
             payload = JSON.parse(body) as Record<string, unknown>
-            if (!['parse', 'run', 'normalize_text'].includes(String(payload.command))
-              || typeof payload.raw_text !== 'string' || 'file_path' in payload || 'output_dir' in payload) throw Error('Unsupported local request')
+            if (!['parse', 'run', 'normalize_text', 'renormalize'].includes(String(payload.command))
+              || (payload.command !== 'renormalize' && typeof payload.raw_text !== 'string')
+              || (payload.command === 'renormalize' && (!payload.run_response || typeof payload.run_response !== 'object'))
+              || 'file_path' in payload || 'output_dir' in payload) throw Error('Unsupported local request')
           } catch { res.statusCode = 400; res.end('Invalid bridge request'); return }
           const child = spawn(process.env.ELISA_PYTHON ?? 'python', ['-m', 'elisa_calculator.bridge'], {
             cwd: fileURLToPath(new URL('../', import.meta.url)),

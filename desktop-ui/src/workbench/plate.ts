@@ -36,6 +36,63 @@ export interface Assignment extends Gradient {
   group: string;
   dilution: number;
 }
+/** Defaults for a new curve. Reading a selection never changes these or the plate. */
+export const DEFAULT_ASSIGNMENT: Assignment = {kind: "comparison", group: "Reference", start: 1, factor: 2, direction: "decreasing", axis: "column", spacing: "physical", dilution: 1};
+export const NEW_WELL_KINDS: WellKind[] = ["comparison", "blank", "excluded", "unassigned"];
+export function legacyPlateWells(plate: PlateDocument): PlateWell[] {
+  return plate.wells.filter(w => w.kind === "standard" || w.kind === "unknown");
+}
+function sameGradient(a: Gradient | null, b: Gradient | null): boolean {
+  return a === b || !!a && !!b && a.start === b.start && a.factor === b.factor && a.direction === b.direction && a.axis === b.axis && a.spacing === b.spacing;
+}
+export interface PlateSelectionEditor {
+  status: "empty" | "unassigned" | "uniform" | "mixed";
+  assignment: Assignment;
+  /** Existing members define the saved physical / compact coordinate origin. */
+  gradientIds: string[];
+  legacy: boolean;
+}
+export function readPlateSelection(plate: PlateDocument, defaults: Assignment = DEFAULT_ASSIGNMENT): PlateSelectionEditor {
+  const selected = plate.wells.filter(w => plate.selected.includes(w.id));
+  const base = {assignment: {...defaults}, gradientIds: [...plate.selected], legacy: selected.some(w => w.kind === "standard" || w.kind === "unknown")};
+  if (!selected.length) return {...base, status: "empty"};
+  if (selected.every(w => w.kind === "unassigned")) return {...base, status: "unassigned"};
+  const first = selected[0];
+  const uniform = selected.every(w => w.kind === first.kind && w.group === first.group && w.dilution === first.dilution && sameGradient(w.gradient, first.gradient));
+  if (!uniform) return {...base, status: "mixed"};
+  const assignment: Assignment = {...defaults, kind: first.kind, group: first.group, dilution: first.dilution, ...(first.gradient ?? {})};
+  // Stored start belongs to the whole assigned gradient, not the selected well's dose.
+  const gradientIds = first.gradient ? plate.wells.filter(w => w.group === first.group && sameGradient(w.gradient, first.gradient) && (w.kind === first.kind || w.kind === "excluded")).map(w => w.id) : [...plate.selected];
+  return {...base, assignment, gradientIds, status: "uniform"};
+}
+/** A stable editor key follows saved selected wells and ignores unrelated settings. */
+export function plateSelectionKey(plate: PlateDocument): string {
+  return JSON.stringify([plate.selected, plate.wells.filter(w => plate.selected.includes(w.id)).map(({id, raw, kind, group, dose, dilution, gradient}) => ({id, raw, kind, group, dose, dilution, gradient}))]);
+}
+/** Preview and Apply share one pure operation; no assignment occurs during selection. */
+export function previewPlateAssignment(plate: PlateDocument, assignment: Assignment): PlateDocument {
+  const selection = readPlateSelection(plate);
+  const gradientIds = selection.status === "uniform" && assignment.axis === selection.assignment.axis ? selection.gradientIds : plate.selected;
+  const proposed = assignWells(plate, plate.selected, assignment, gradientIds);
+  const saved = plate.wells.find(w => plate.selected.includes(w.id));
+  if (selection.status !== "uniform" || !saved?.gradient || !["comparison", "standard"].includes(assignment.kind)) return proposed;
+  const oldGradient = saved.gradient;
+  const unchanged = sameGradient(oldGradient, assignment);
+  if (!unchanged && (oldGradient.axis !== assignment.axis || oldGradient.spacing !== assignment.spacing)) return proposed;
+  // Use the confirmed dose to retain the original step even after a subgroup rename
+  // or exclusion removed the former first member from the current group.
+  return {...proposed, wells: proposed.wells.map(w => {
+    if (!plate.selected.includes(w.id)) return w;
+    const original = plate.wells.find(old => old.id === w.id)!;
+    if (unchanged) return {...w, dose: original.dose};
+    if (original.dose === null) return w;
+    const inferredStep = (Math.log(original.dose) - Math.log(oldGradient.start)) / (Math.log(oldGradient.factor) * (oldGradient.direction === "decreasing" ? -1 : 1));
+    const step = Math.abs(inferredStep - Math.round(inferredStep)) < 1e-9 ? Math.round(inferredStep) : inferredStep;
+    const dose = assignment.start * assignment.factor ** (step * (assignment.direction === "decreasing" ? -1 : 1));
+    if (!Number.isFinite(dose) || dose <= 0) throw new Error("生成的浓度超出有效数值范围");
+    return {...w, dose};
+  })};
+}
 export function createPlate(): PlateDocument {
   return {schema: "elisa-plate/1", wells: WELL_IDS.map(id => ({id, raw: "", kind: "unassigned", group: "", dose: null, dilution: 1, gradient: null})), selected: [], anchor: "A1", basis: "relative", unit: "ng/mL", blankMode: "none", replicateMode: "individual"};
 }
@@ -82,7 +139,7 @@ export function applyPaste(plate: PlateDocument, preview: PastePreview, overwrit
   const cells = new Map(preview.cells.map(cell => [cell.id, cell.raw]));
   return {...plate, wells: plate.wells.map(w => cells.has(w.id) ? {...w, raw: cells.get(w.id)!} : w)};
 }
-export function assignWells(plate: PlateDocument, ids: string[], assignment: Assignment): PlateDocument {
+export function assignWells(plate: PlateDocument, ids: string[], assignment: Assignment, gradientIds: string[] = ids): PlateDocument {
   if (!ids.length || ids.some(id => !WELL_IDS.includes(id))) throw new Error("先选择需要标记的孔位");
   const curve = assignment.kind === "comparison" || assignment.kind === "standard";
   if (!["unassigned", "excluded", "blank"].includes(assignment.kind) && !assignment.group.trim()) throw new Error("组名 / 样品名不能为空");
@@ -94,7 +151,8 @@ export function assignWells(plate: PlateDocument, ids: string[], assignment: Ass
   const doses = new Map<string, number>();
   if (curve) {
     const lines = new Map<number, {id: string; position: number}[]>();
-    for (const id of WELL_IDS.filter(w => selected.has(w))) {
+    if (gradientIds.some(id => !WELL_IDS.includes(id)) || ids.some(id => !gradientIds.includes(id))) throw new Error("梯度坐标必须包含全部选中孔位");
+    for (const id of WELL_IDS.filter(w => gradientIds.includes(w))) {
       const [r, c] = coordinates(id), line = assignment.axis === "column" ? c : r, position = assignment.axis === "column" ? r : c;
       lines.set(line, [...(lines.get(line) ?? []), {id, position}]);
     }
@@ -136,6 +194,10 @@ export function compilePlate(plate: PlateDocument, options: AnalysisOptions): Co
   const errors: string[] = [], warnings: string[] = [];
   const curveKinds = options.workflow === "comparative" ? ["comparison", "standard"] : ["standard"];
   const curves = plate.wells.filter(w => curveKinds.includes(w.kind));
+  if (options.workflow === "comparative") {
+    const legacy = legacyPlateWells(plate);
+    if (legacy.length) errors.push(`旧版标准 / 未知孔位保留：${legacy.map(w => w.id).join("、")}。请明确重标记为比较曲线、空白或排除后计算；不会自动转换或反算`);
+  }
   const unknowns = plate.wells.filter(w => w.kind === "unknown");
   const groups = [...new Set(curves.map(w => w.group))];
   if (!curves.length) errors.push("尚未标记拟合曲线孔位");

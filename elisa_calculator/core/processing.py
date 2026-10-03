@@ -84,6 +84,7 @@ class GlobalFitResult:
     c_covariance: dict = field(default_factory=dict)
     diagnostics: dict = field(default_factory=dict)
     failures: dict = field(default_factory=dict)
+    batch_covariances: dict = field(default_factory=dict)
 
 
 def _raw_scalar(value):
@@ -294,7 +295,7 @@ def fit_prepared_groups(prepared):
     if not groups:
         return GlobalFitResult(False, prepared.get('preparation_error', 'no groups ready for fitting'), group_map, None)
     mode = prepared['options']['fit_mode']
-    estimates, failures, c_covariance, diagnostics = {}, {}, {}, {}
+    estimates, failures, c_covariance, diagnostics, batch_covariances = {}, {}, {}, {}, {}
     covariance = None
     batches = [groups] if mode == 'shared' else [[g] for g in groups]
     for batch in batches:
@@ -302,6 +303,7 @@ def fit_prepared_groups(prepared):
             result, cov, diag = _fit_batch(batch)
             estimates.update(result)
             diagnostics[str(batch[0]['group_name']) if mode == 'independent' else 'shared'] = diag
+            batch_covariances[str(batch[0]['group_name']) if mode == 'independent' else 'shared'] = cov
             if mode == 'shared':
                 covariance = cov
             for left in batch:
@@ -320,7 +322,7 @@ def fit_prepared_groups(prepared):
         fit = estimates.get(g['group_index'])
         legacy.extend([fit['params'].B,fit['params'].C] if fit else [np.nan,np.nan])
     return GlobalFitResult(True, '', group_map, np.asarray(legacy), global_A, global_D,
-                           estimates, covariance, c_covariance, diagnostics, failures)
+                           estimates, covariance, c_covariance, diagnostics, failures, batch_covariances)
 
 
 def _append_warning(row, detail, warning):
@@ -539,6 +541,10 @@ def build_calculation_report(prepared, fit_result):
         detail.warning_list = list(row['warning_list'])
         summary.append(row)
         details.append(detail)
+    # Freeze the fitted, pre-comparison scientific record. Reference-only edits
+    # must never consume rounded/displayed X values or accumulated warnings.
+    from .normalization import build_reference_fit_context
+    reference_fit_context = build_reference_fit_context(prepared, fit_result, summary, details)
     comparison = _comparison(prepared,fit_result,summary,details)
     unknowns = _quantitate_unknowns(options,prepared['groups'],details)
     report_warnings = []
@@ -555,6 +561,8 @@ def build_calculation_report(prepared, fit_result):
                 'blank_correction':'none' if options['blank_mode']=='none' else f"subtract {options['blank_value']}",
                 'replicate_policy':options['replicate_mode'],'fit_diagnostics':fit_result.diagnostics,
                 'fit_covariance':fit_result.covariance,
+                'fit_batch_covariances':fit_result.batch_covariances,
+                'reference_fit_context':reference_fit_context,
                 'uncertainty_note':'Approximate conditional 95% CIs; no plate/run, dilution-factor, starting-concentration or reference assignment uncertainty included.',
                 'comparability_note':'No automatic unit conversion. Matching units and dose domains are required.'}
     return CalculationReport(prepared,fit_result.success,fit_result.error,
