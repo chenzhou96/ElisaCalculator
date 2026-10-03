@@ -76,7 +76,7 @@ test('standard reference, absolute units, unknown dilution and reference positiv
  assert.equal(compilePlate(p,o).ok,true);p.basis='relative';assert.equal(compilePlate(p,o).ok,false)
  p.basis='absolute';od(p,'B3').dilution=10;assert.equal(compilePlate(p,o).ok,false)
  assert.equal(compilePlate(plateExample('comparative'),{...options,reference_assigned_value:0}).ok,false)
- const relative=plateExample('comparative');od(relative,'A1').dose=2;assert.match(compilePlate(relative,options).errors.join(),/分数不能大于 1/)
+ const relative=plateExample('comparative');od(relative,'A1').dose=20;assert.equal(compilePlate(relative,options).ok,true);assert.equal(compilePlate(relative,options).options.dose_basis,'dimensionless')
 })
 test('atomic undo/redo restore plate and reference options and invalidate old async/results',()=>{
  let s=structuredClone(initialWorkspace);s=reducer(s,{type:'plate-example',workflow:'comparative'})

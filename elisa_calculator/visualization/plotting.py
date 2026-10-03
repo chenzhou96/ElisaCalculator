@@ -13,6 +13,8 @@ def _label(options=None):
     options = options or {}
     absolute = options.get('input_mode') != 'dilution_step' or options.get('start_concentration') is not None
     unit = options.get('concentration_unit') or 'unspecified concentration units'
+    if not absolute and options.get('dose_basis') == 'dimensionless':
+        return 'log10 dose (dimensionless)'
     return f'log10 dose ({unit})' if absolute else 'log10 relative dose (starting dose = 1)'
 
 

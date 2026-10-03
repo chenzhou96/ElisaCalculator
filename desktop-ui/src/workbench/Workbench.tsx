@@ -20,6 +20,8 @@ import ResultsPanel, { ResultInspector } from "./ResultsPanel";
 import PlotsPanel from "./PlotsPanel";
 import GuidePanel from "./GuidePanel";
 import { parseRecord, serializeRecord } from "./record";
+import { applyTheme, readTheme } from "./theme";
+import { locateProblem, type InputProblem } from "./validation";
 
 const pageNames: Record<Page, string> = {
   data: "原始数据",
@@ -30,7 +32,7 @@ const pageNames: Record<Page, string> = {
   guide: "使用说明",
 };
 const pageSubtitles: Record<Page, string> = {
-  data: "粘贴、检查，然后明确每条曲线的含义",
+  data: "粘贴读数、标记组别，然后直接运行分析",
   settings: "让输入坐标、参考组和实验设计保持一致",
   unknowns: "从标准曲线反算，并校正样品稀释",
   results: "保留单位、模型假设和质量提示",
@@ -45,12 +47,33 @@ export default function Workbench() {
   const [selectedGroup, setSelectedGroup] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
   const [compact, setCompact] = useState(true);
+  const [theme, setTheme] = useState(readTheme);
   const menuRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const recordRef = useRef<HTMLInputElement>(null);
   const requestRef = useRef(0);
   const lockRef = useRef(false);
   const native = isTauri();
+  const [problemState, setProblem] = useState<(InputProblem & {version: number}) | null>(null);
+  const problem = problemState?.version === state.version && state.error ? problemState : null;
+  const latest = useRef(state);
+  useEffect(() => {latest.current = state;}, [state]);
+  useEffect(() => {
+    if (!problem || state.page !== problem.page) return;
+    const marked: HTMLElement[] = [];
+    const timer = window.setTimeout(() => {
+      for (const label of problem.fields) {
+        const field = [...document.querySelectorAll<HTMLElement>(".page-content [data-field]")].find(node => node.dataset.field === label);
+        const control = field?.querySelector<HTMLElement>("input,select,textarea") ?? [...document.querySelectorAll<HTMLElement>(".page-content [aria-label]")].find(node => node.getAttribute("aria-label") === label);
+        if (control) {control.setAttribute("aria-invalid", "true"); control.setAttribute("aria-describedby", "input-error"); marked.push(control);}
+      }
+      const target = marked[0] ?? document.querySelector<HTMLElement>(".well[aria-invalid=true]");
+      target?.focus();
+      target?.scrollIntoView?.({block: "nearest"});
+    }, 0);
+    return () => {window.clearTimeout(timer); marked.forEach(node => {node.removeAttribute("aria-invalid"); node.removeAttribute("aria-describedby");});};
+  }, [problem, state.page]);
+  useEffect(() => applyTheme(theme), [theme]);
   useEffect(() => {
     if (!menu) return;
     function close(event: MouseEvent) {
@@ -68,60 +91,52 @@ export default function Workbench() {
   }, [menu]);
   async function analyze(kind: "parse" | "run") {
     if (lockRef.current) return;
-    let options;
     const plate = state.inputView === "plate" ? compilePlate(state.plate, state.options) : null;
-    try {
-      if (plate && !plate.ok) throw new Error(plate.errors.slice(0, 3).join("；"));
-      if (kind === "run") options = buildOptions(state);
-    } catch (error) {
-      dispatch({
-        type: "error",
-        error: String(error instanceof Error ? error.message : error),
-      });
-      dispatch({ type: "page", page: state.inputView === "plate" ? "data" : "settings" });
-      return;
+    function showProblem(messages: string[], request?: number) {
+      if (request !== undefined && latest.current.version !== state.version) return;
+      const location = locateProblem(state, messages);
+      setProblem({...location, version: state.version});
+      dispatch({type: "error", error: messages.slice(0, 3).join("；"), request, version: state.version});
+      dispatch({type: "page", page: location.page});
+      if (location.wells.length) dispatch({type: "plate-selection", selected: [location.wells[0]], anchor: location.wells[0]});
+    }
+    if (plate && !plate.ok) {showProblem(plate.errors); return;}
+    // Already previewed inputs validate synchronously; new table data is parsed below.
+    if (kind === "run" && (plate || state.parsed?.ok)) {
+      try {buildOptions(state);} catch (error) {showProblem([error instanceof Error ? error.message : String(error)]); return;}
     }
     lockRef.current = true;
-    const request = ++requestRef.current;
-    const version = state.version;
-    dispatch({ type: "begin", request, busy: kind });
+    const request = ++requestRef.current, version = state.version;
+    setProblem(null);
+    dispatch({type: "begin", request, busy: kind});
     try {
-      const payload = {
-        command: kind,
+      let working = state;
+      const input = {
         raw_text: plate?.rawText ?? state.rawText,
         source_label: plate ? "96 孔板 · 明确孔位映射" : state.source,
         header_mode: plate ? "present" : state.headerMode,
         preview_rows: 200,
         x_col_name: plate ? "Dose" : state.xColumn || undefined,
         ...(plate ? {plate_mapping: plate.mapping} : {}),
-        ...(kind === "run"
-          ? { analysis_options: options, save_outputs: state.saveOutputs }
-          : {}),
       };
-      if (kind === "parse")
-        dispatch({
-          type: "parsed",
-          request,
-          version,
-          response: await callBridge<ParseResponse>(payload),
-        });
-      else
-        dispatch({
-          type: "ran",
-          request,
-          version,
-          response: await callBridge<RunResponse>(payload),
-        });
+      if (kind === "parse" || (!plate && !state.parsed?.ok)) {
+        const response = await callBridge<ParseResponse>({command: "parse", ...input});
+        if (latest.current.version !== version) return;
+        dispatch({type: "parsed", request, version, response});
+        if (!response.ok) {showProblem([response.error ?? "解析失败"], request); return;}
+        if (kind === "parse") return;
+        working = reducer({...state, request}, {type: "parsed", request, version, response});
+      }
+      const options = buildOptions(working);
+      const response = await callBridge<RunResponse>({command: "run", ...input, x_col_name: plate ? "Dose" : working.xColumn || undefined, analysis_options: options, save_outputs: state.saveOutputs});
+      if (latest.current.version !== version) return;
+      dispatch({type: "ran", request, version, response});
+      if (!response.ok) showProblem([response.error ?? "计算失败"], request);
     } catch (error) {
-      dispatch({
-        type: "error",
-        request,
-        version,
-        error: String(error instanceof Error ? error.message : error),
-      });
+      showProblem([error instanceof Error ? error.message : String(error)], request);
     } finally {
       lockRef.current = false;
-      dispatch({ type: "end", request });
+      dispatch({type: "end", request});
     }
   }
   async function importFile(
@@ -203,7 +218,6 @@ export default function Workbench() {
     else dispatch({ type: "reset" });
   }
   const hasInputs = Boolean(state.rawText || state.plate.wells.some(w => w.raw || w.kind !== "unassigned"));
-  const activePlate = state.inputView === "plate" ? compilePlate(state.plate, state.options) : null;
   const row =
     state.result?.report?.summary_rows.find(
       (row) => row.Group === selectedGroup,
@@ -287,6 +301,18 @@ export default function Workbench() {
               ) : (
                 <>
                   <button
+                    role="menuitemcheckbox"
+                    aria-checked={theme === "dark"}
+                    onClick={() => {
+                      setTheme((value) => value === "dark" ? "light" : "dark");
+                      setMenu(null);
+                    }}
+                  >
+                    <Icon name={theme === "dark" ? "sun" : "moon"} />
+                    夜间模式{theme === "dark" ? " ✓" : ""}
+                  </button>
+                  <hr />
+                  <button
                     role="menuitem"
                     onClick={() => {
                       setSidebar((value) => !value);
@@ -331,7 +357,16 @@ export default function Workbench() {
         <div className="app-caption" data-tauri-drag-region>
           研究分析工作台
         </div>
-        <span className="version-tag">v0.2.0</span>
+        <button
+          className="theme-toggle"
+          aria-label={theme === "dark" ? "切换到日间模式" : "切换到夜间模式"}
+          title={theme === "dark" ? "切换到日间模式" : "切换到夜间模式"}
+          onClick={() => setTheme((value) => value === "dark" ? "light" : "dark")}
+        >
+          <Icon name={theme === "dark" ? "sun" : "moon"} size={15} />
+          {theme === "dark" ? "日间" : "夜间"}
+        </button>
+        <span className="version-tag">v0.2.3</span>
         {native && (
           <div className="window-buttons">
             <button
@@ -382,7 +417,7 @@ export default function Workbench() {
               >
                 <Icon name="plots" />
                 <span>
-                  曲线比较<small>EC50 · 相对原液强度</small>
+                  曲线比较<small>EC50 · 中点相对值</small>
                 </span>
               </button>
               <button
@@ -466,7 +501,7 @@ export default function Workbench() {
                 className="primary"
                 onClick={() => void analyze("run")}
                 disabled={
-                  !!state.busy || !state.parsed?.ok || (activePlate ? !activePlate.ok : !state.rawText.trim())
+                  !!state.busy
                 }
               >
                 <Icon name="play" size={13} />
@@ -475,7 +510,7 @@ export default function Workbench() {
             </div>
           </div>
           {state.error && (
-            <div className="notice error" role="alert">
+            <div className="notice error" role="alert" id="input-error">
               <span>{state.error}</span>
               <button
                 aria-label="关闭错误"
@@ -495,12 +530,12 @@ export default function Workbench() {
                   load={() => fileRef.current?.click()}
                 />
               )}{" "}
-              {state.page === "data" && state.inputView === "plate" && <PlatePanel state={state} dispatch={dispatch} parse={() => void analyze("parse")} />}
+              {state.page === "data" && state.inputView === "plate" && <PlatePanel state={state} dispatch={dispatch} problem={problem} parse={() => void analyze("parse")} />}
               {state.page === "settings" && (
                 <SettingsPanel state={state} dispatch={dispatch} />
               )}{" "}
               {state.page === "unknowns" && (
-                <UnknownPanel state={state} dispatch={dispatch} />
+                <UnknownPanel state={state} dispatch={dispatch} problem={problem} />
               )}{" "}
               {state.page === "results" && (
                 <ResultsPanel

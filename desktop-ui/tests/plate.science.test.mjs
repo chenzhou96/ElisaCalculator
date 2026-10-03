@@ -18,8 +18,8 @@ function close(actual,expected,tol=1e-5){assert.ok(Math.abs(actual-expected)<tol
 
 test('independent comparison truth: relative plate and existing table produce 10X and 40X',()=>{
  const p=plateExample('comparative'),report=run(p)
- close(report.summary_rows.find(r=>r.Group==='Reference').Relative_stock_potency_X,10)
- const sample=report.summary_rows.find(r=>r.Group==='Sample_4X');close(sample.Relative_stock_potency_X,40)
+ close(report.summary_rows.find(r=>r.Group==='Reference').Normalized_midpoint_X,10)
+ const sample=report.summary_rows.find(r=>r.Group==='Sample_4X');close(sample.Normalized_midpoint_X,40)
  assert.equal(report.metadata.plate_mapping.rows.length,96);assert.equal(report.metadata.plate_mapping.rows.find(r=>r.well==='A1').raw,well(p,'A1').raw)
  const fixture=JSON.parse(readFileSync(repo+'examples/comparison_request.json','utf8'))
  const table=execute(fixture.raw_text,{...defaultOptions,...fixture.analysis_options},undefined)
@@ -28,7 +28,7 @@ test('independent comparison truth: relative plate and existing table produce 10
 test('explicit replicate weighting: 16 observations vs 8 dose means retain correct truth',()=>{
  const p=plateExample('comparative');const individual=run(p);p.replicateMode='mean';const mean=run(p)
  assert.equal(individual.summary_rows[0].N,16);assert.equal(mean.summary_rows[0].N,8)
- close(mean.summary_rows.find(r=>r.Group==='Sample_4X').Relative_stock_potency_X,40)
+ close(mean.summary_rows.find(r=>r.Group==='Sample_4X').Normalized_midpoint_X,40)
 })
 test('standard 12×5=60 and restored 4×10=40; dilution and blank each applied once',()=>{
  const p=plateExample('standard_curve'), o={...options,workflow:'standard_curve',standard_group:'Standard',fit_mode:'independent'}
@@ -50,7 +50,7 @@ test('same-group blanks, raw preservation and a negative corrected observation r
  const p=plateExample('comparative');p.blankMode='group';well(p,'A5').group='Reference';well(p,'B5').group='Sample_4X'
  for(const w of p.wells)if(w.group==='Sample_4X'&&w.kind==='comparison')w.raw=String(Number(w.raw)+.03)
  well(p,'B5').raw='.05';const report=run(p)
- close(report.summary_rows.find(r=>r.Group==='Sample_4X').Relative_stock_potency_X,40)
+ close(report.summary_rows.find(r=>r.Group==='Sample_4X').Normalized_midpoint_X,40)
  well(p,'H1').raw='0';const negative=run(p)
  const point=negative.detailed_rows.find(r=>r.group_name==='Reference').processed_points.find(r=>r.processed_y===-.02)
  assert.ok(point,'negative value retained through actual engine')
@@ -62,33 +62,44 @@ test('different group factors and dose grids preserve relative stock fraction tr
  p=assignWells(p,ids,{kind:'comparison',group:'Sample_4X',start:.9,factor:3,direction:'decreasing',axis:'column',spacing:'physical',dilution:1})
  for(const w of p.wells.filter(w=>w.group==='Sample_4X'))w.raw=String(.08+2.8/(1+(.04419417382415922/w.dose)**1.8)+.02)
  const c=compilePlate(p,options);assert.equal(c.ok,true);assert.match(c.warnings.join(),/剂量不同/)
- const report=run(p);close(report.summary_rows.find(r=>r.Group==='Sample_4X').Relative_stock_potency_X,40)
+ const report=run(p);close(report.summary_rows.find(r=>r.Group==='Sample_4X').Normalized_midpoint_X,40)
  assert.equal(report.summary_rows.find(r=>r.Group==='Sample_4X').N,16)
 })
 test('unfit reference never produces a normalized X or EC50 ratio',()=>{
  const p=plateExample('comparative')
  for(const w of p.wells.filter(w=>w.group==='Reference'))w.raw='.5'
  const report=run(p,{...options,fit_mode:'independent'})
- for(const row of report.summary_rows){assert.equal(row.Relative_stock_potency_X,null);assert.equal(row.EC50_ratio,null)}
+ for(const row of report.summary_rows){assert.equal(row.Normalized_midpoint_X,null);assert.equal(row.EC50_ratio,null)}
 })
 test('absolute input does not fabricate unknown stock concentration or stock X',()=>{
  const p=plateExample('comparative');p.basis='absolute';p.unit='nM'
- const report=run(p);assert.equal(report.summary_rows.find(r=>r.Group==='Sample_4X').Relative_stock_potency_X,null)
+ const report=run(p);assert.equal(report.summary_rows.find(r=>r.Group==='Sample_4X').Normalized_midpoint_X,null)
  assert.match(report.summary_rows.find(r=>r.Group==='Sample_4X').Warning,/original-stock potency unavailable/)
 })
 test('opposite directions suppress ratios; nonparallel output explicitly limits midpoint interpretation',()=>{
  const p=plateExample('comparative');const a=.08,d=2.88,c=Math.log10(.0625)
  for(const w of p.wells.filter(w=>w.group==='Sample_4X'))w.raw=String(a+(d-a)/(1+10**(3.2*(c-Math.log10(w.dose))))+.02)
  const nonparallel=run(p);assert.match(nonparallel.summary_rows.find(r=>r.Group==='Sample_4X').Warning,/nonparallel slopes/)
- assert.match(nonparallel.comparison.interpretation,/common potency.*not established/)
+ assert.match(nonparallel.comparison.interpretation,/no original-stock fraction.*biological potency is inferred/)
  const values=p.wells.filter(w=>w.group==='Sample_4X').map(w=>w.raw)
  for(const col of [3,4]){const ws=p.wells.filter(w=>w.group==='Sample_4X'&&w.id.endsWith(String(col)));for(let i=0;i<8;i++)ws[i].raw=values[7-i]}
- const opposite=run(p).summary_rows.find(r=>r.Group==='Sample_4X');assert.equal(opposite.Relative_stock_potency_X,null);assert.equal(opposite.EC50_ratio,null)
+ const opposite=run(p).summary_rows.find(r=>r.Group==='Sample_4X');assert.equal(opposite.Normalized_midpoint_X,null);assert.equal(opposite.EC50_ratio,null)
 })
 
 test('legal quoted group names survive actual TSV parse and retain reference normalization',()=>{
  const p=plateExample('comparative');for(const w of p.wells)if(w.group==='Reference')w.group='"Reference"'
  const c=compilePlate(p,{...options,reference_group:'"Reference"'});assert.equal(c.ok,true);assert.match(c.rawText,/""Reference""/)
  const report=run(p,{...options,reference_group:'"Reference"'})
- close(report.summary_rows.find(r=>r.Group==='"Reference"').Relative_stock_potency_X,10);close(report.summary_rows.find(r=>r.Group==='Sample_4X').Relative_stock_potency_X,40)
+ close(report.summary_rows.find(r=>r.Group==='"Reference"').Normalized_midpoint_X,10);close(report.summary_rows.find(r=>r.Group==='Sample_4X').Normalized_midpoint_X,40)
+})
+
+test('starting dimensionless dose 20 has no upper limit and scales only the encoded axis',()=>{
+ const p=plateExample('comparative'),base=run(p)
+ for(const w of p.wells)if(w.kind==='comparison')w.dose*=20
+ const report=run(p),sample=report.summary_rows.find(r=>r.Group==='Sample_4X')
+ close(sample.EC50,20*base.summary_rows.find(r=>r.Group==='Sample_4X').EC50)
+ close(sample.Normalized_midpoint_X,40)
+ assert.equal(sample.Relative_stock_potency_X,null)
+ assert.equal(sample.EC50_unit,'dimensionless dose')
+ assert.match(report.comparison.interpretation,/no original-stock fraction/)
 })

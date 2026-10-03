@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.2.0"
+version = "0.2.3"
 description = "ELISA dose-response comparison and standard-curve workbench"
 authors = ["chenzhou96"]
 license = ""

@@ -152,14 +152,18 @@ class ScientificValidationTests(unittest.TestCase):
 
     @patch('elisa_calculator.visualization.plotting.create_preview_plots',return_value=[{'id':'overview','group_name':'All groups','data_url':'data:image/png;base64,AA=='}])
     def test_bridge_forwards_options_and_keeps_replay_metadata(self,_):
-        raw=input_frame().to_csv(index=False)
-        response=handle_request({'command':'run','raw_text':raw,'analysis_options':{'reference_group':'Ref','reference_assigned_value':10},'save_outputs':False})
-        self.assertTrue(response['ok'])
-        self.assertEqual(response['report']['options']['reference_assigned_value'],10)
-        self.assertEqual(response['report']['metadata']['raw_input'],raw)
-        self.assertAlmostEqual(response['results'][1]['Relative_stock_potency_X'],20,places=5)
-        self.assertTrue(response['previews']); self.assertEqual(response['saved_files'],[])
-        json.loads(_serialize_response_bytes(response))
+        normalized=input_frame().to_csv(index=False,lineterminator='\n')
+        for ending in ('\n','\r\n','\r'):
+            with self.subTest(line_ending=repr(ending)):
+                raw=normalized.replace('\n',ending)
+                response=handle_request({'command':'run','raw_text':raw,'analysis_options':{'reference_group':'Ref','reference_assigned_value':10},'save_outputs':False})
+                self.assertTrue(response['ok'])
+                self.assertEqual(response['report']['options']['reference_assigned_value'],10)
+                self.assertEqual(response['report']['metadata']['raw_input'],normalized)
+                self.assertEqual(response['report']['metadata']['raw_input_original'],raw)
+                self.assertAlmostEqual(response['results'][1]['Relative_stock_potency_X'],20,places=5)
+                self.assertTrue(response['previews']); self.assertEqual(response['saved_files'],[])
+                json.loads(_serialize_response_bytes(response))
 
     @patch('elisa_calculator.visualization.plotting.create_preview_plots',side_effect=OSError('render failed'))
     def test_preview_failure_does_not_destroy_calculation(self,_):

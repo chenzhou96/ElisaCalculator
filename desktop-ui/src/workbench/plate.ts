@@ -1,3 +1,4 @@
+import { evaluateNumber } from "./arithmetic.ts";
 import type { AnalysisOptions } from "./types";
 
 export const ROWS = "ABCDEFGH";
@@ -54,10 +55,7 @@ export function selectWells(plate: PlateDocument, id: string, mode: "single" | "
 }
 /** Empty strings are missing; zero is a real measurement. No locale/transpose inference. */
 export function numericOD(raw: string): number | null {
-  const value = raw.trim();
-  if (!value || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value)) return null;
-  const result = Number(value);
-  return Number.isFinite(result) ? result : null;
+  try {return evaluateNumber(raw);} catch {return null;}
 }
 export interface PastePreview {
   rows: number;
@@ -147,7 +145,6 @@ export function compilePlate(plate: PlateDocument, options: AnalysisOptions): Co
     if (w.kind === "unassigned" && w.raw.trim()) errors.push(`${w.id}：有读数但未分配；请标记或明确排除`);
     if (w.kind !== "unassigned" && w.kind !== "excluded" && numericOD(w.raw) === null) errors.push(`${w.id}：${w.raw.trim() ? "非法读数" : "缺失读数"}；不能当作 0`);
     if ((w.kind === "comparison" || w.kind === "standard" || w.kind === "unknown") && !w.group.trim()) errors.push(`${w.id}：缺少组名`);
-    if (plate.basis === "relative" && curves.includes(w) && w.dose !== null && w.dose > 1) errors.push(`${w.id}：相对原液分数不能大于 1；请修正剂量或选择已知绝对浓度`);
     if (curves.includes(w) && (!Number.isFinite(w.dose) || w.dose === null || w.dose <= 0)) errors.push(`${w.id}：缺少有效正浓度 / 相对剂量`);
     if (options.workflow === "standard_curve" && w.kind === "comparison") errors.push(`${w.id}：比较孔不能进入标准拟合；请重标记或排除`);
     if (options.workflow === "comparative" && w.kind === "unknown") errors.push(`${w.id}：未知样品需要标准反算工作流`);
@@ -173,7 +170,7 @@ export function compilePlate(plate: PlateDocument, options: AnalysisOptions): Co
     if (!unknowns.length) errors.push("请标记至少一个未知样品孔");
   }
   const unit = plate.basis === "relative" ? "relative dose" : plate.unit.trim();
-  const mappedOptions: AnalysisOptions = {...options, input_mode: plate.basis === "relative" ? "dilution_step" : "raw_concentration", dilution_factor: 2, dilution_direction: "increasing", first_step: 1, start_concentration: null, concentration_unit: unit, blank_mode: "none", blank_value: 0, replicate_mode: plate.replicateMode, replicate_groups: {}, unknown_samples: []};
+  const mappedOptions: AnalysisOptions = {...options, dose_basis: plate.basis === "relative" ? "dimensionless" : "stock_fraction", input_mode: plate.basis === "relative" ? "dilution_step" : "raw_concentration", dilution_factor: 2, dilution_direction: "increasing", first_step: 1, start_concentration: null, concentration_unit: unit, blank_mode: "none", blank_value: 0, replicate_mode: plate.replicateMode, replicate_groups: {}, unknown_samples: []};
   for (const group of [...new Set(unknowns.map(w => w.group))]) {
     const wells = unknowns.filter(w => w.group === group);
     if (groups.includes(group)) errors.push(`${group}：未知样品名不能与拟合组相同`);
@@ -197,14 +194,14 @@ export function compilePlate(plate: PlateDocument, options: AnalysisOptions): Co
   }
   mappedOptions.replicate_groups = Object.fromEntries(groups.map(group => [group, columns.filter(c => c.group === group).map(c => c.name)]));
   const rawText = ["Dose\t" + columns.map(c => c.name.includes('"') ? '"' + c.name.replace(/"/g, '""') + '"' : c.name).join("\t"), ...doses.map(dose => [plate.basis === "relative" ? 1 - Math.log2(dose) : dose, ...columns.map(c => c.values.get(dose) ?? "")].join("\t"))].join("\n");
-  const mapping: PlateMapping = {schema: "elisa-plate-mapping/1", plate, coordinateEncoding: plate.basis === "relative" ? "Canonical X = 1 - log2(relative stock fraction); engine uses relative dilution_step, factor 2, first_step 1. This encoding preserves every confirmed dose and group gradient." : "Canonical X is the confirmed absolute dose in the explicit plate unit; stock concentration is unspecified, so original-stock X is unavailable.", blankScope: plate.blankMode === "none" ? "不扣空白" : plate.blankMode === "global" ? "全板有效空白均值；所有拟合组和未知样品各扣一次" : "每组仅使用同名空白均值；缺组空白阻止计算，不回退", replicatePolicy: plate.replicateMode === "individual" ? "逐孔拟合，每个有效观测等权；技术复孔不视为独立实验" : "每组每剂量均值拟合，剂量均值等权；不按复孔数加权", rows: plate.wells.map(w => {
+  const mapping: PlateMapping = {schema: "elisa-plate-mapping/1", plate, coordinateEncoding: plate.basis === "relative" ? "Canonical X = 1 - log2(dimensionless dose); engine uses a reversible dimensionless dilution_step encoding, factor 2, first_step 1. This encoding preserves every confirmed dose and group gradient." : "Canonical X is the confirmed absolute dose in the explicit plate unit; stock concentration is unspecified, so original-stock X is unavailable.", blankScope: plate.blankMode === "none" ? "不扣空白" : plate.blankMode === "global" ? "全板有效空白均值；所有拟合组和未知样品各扣一次" : "每组仅使用同名空白均值；缺组空白阻止计算，不回退", replicatePolicy: plate.replicateMode === "individual" ? "逐孔拟合，每个有效观测等权；技术复孔不视为独立实验" : "每组每剂量均值拟合，剂量均值等权；不按复孔数加权", rows: plate.wells.map(w => {
     const value = numericOD(w.raw), included = curveKinds.includes(w.kind) || w.kind === "unknown", blank = included ? blankCache.get(w.group) ?? 0 : 0;
     const processedOD = value === null || !included ? null : value - blank;
     if (processedOD !== null && processedOD < 0) warnings.push(`${w.id}：空白校正后为负值，保留原值不裁零`);
     return {well: w.id, group: w.group, kind: w.kind, raw: w.raw, dose: w.dose, processedOD, blank, tableColumn: positions.get(w.id)?.column ?? null, tableRow: positions.get(w.id)?.row ?? null, dilution: w.dilution};
   })};
   if (columns.length > 1 && doses.length > 0 && columns.some(c => c.values.size < doses.length)) warnings.push("各组剂量不同：表格保留空位；引擎只纳入各组实际有效观测");
-  if (plate.basis === "relative") warnings.push("相对剂量 1 明确代表原液分数 1；按该共同约定换算原液中点倍率，EC50 不是绝对浓度。曲线平行性和恒定效价未被证明");
+  if (plate.basis === "relative") warnings.push("剂量为无量纲正数，不推断原液分数或绝对浓度；中点相对值 = 参比赋值 × 参比 EC50 / 样品 EC50。曲线平行性和恒定效价未被证明");
   return {ok: errors.length === 0, errors, warnings, rawText, options: mappedOptions, mapping, groups};
 }
 /** Strict persisted document shape: 96 unique coordinates in row-major order. */

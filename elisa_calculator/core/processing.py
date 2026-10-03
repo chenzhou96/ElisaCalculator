@@ -172,7 +172,7 @@ def prepare_group_data(df, x_col_name=None, y_cols_names=None, analysis_options=
             elif len(x) > len(np.unique(x)):
                 notes.append('replicate observations fit individually with equal weights; technical replicates may not be independent')
             if coordinate['input_mode'] == 'dilution_step' and not coordinate['absolute']:
-                notes.append('starting concentration unknown: EC50 is a relative stock fraction, not an absolute concentration')
+                notes.append('EC50 is on a dimensionless dose scale; no original-stock fraction or absolute concentration is inferred' if coordinate['dose_basis'] == 'dimensionless' else 'starting concentration unknown: EC50 is a relative stock fraction, not an absolute concentration')
             if coordinate['absolute'] and not coordinate['concentration_unit']:
                 notes.append('concentration unit unspecified; cross-group comparisons require matching units')
             if options['blank_mode'] == 'constant':
@@ -344,6 +344,10 @@ def _comparison(prepared, fit_result, rows, details):
                   'interpretation': 'Apparent midpoint-based stock strength, conditional on comparable assay response and preparation. Slopes are independently estimated; a common potency across all response levels is not established.',
                   'nonparallel_warning_rule': 'Heuristic slope magnitude ratio outside 0.8–1.25; not a statistical parallelism test',
                   'warning_list': [], 'logEC50_covariance': {}}
+    if options['dose_basis'] == 'dimensionless':
+        comparison['normalized_midpoint_definition'] = 'reference assigned X × reference EC50 / group EC50 on the same dimensionless dose scale'
+        comparison['stock_potency_definition'] = None
+        comparison['interpretation'] = 'Dimensionless midpoint comparison; no original-stock fraction, physical concentration or biological potency is inferred.'
     if reference_name not in by_name or by_name[reference_name][1]['Status'] != 'Success':
         warning = 'reference group missing or could not be fitted; comparisons unavailable'
         comparison['warning_list'].append(warning)
@@ -355,7 +359,7 @@ def _comparison(prepared, fit_result, rows, details):
         if row['Status'] != 'Success':
             continue
         coord, ref_coord = g['coordinate'], ref_g['coordinate']
-        valid_domain = coord['absolute'] == ref_coord['absolute']
+        valid_domain = coord['absolute'] == ref_coord['absolute'] and (coord['absolute'] or coord['dose_basis'] == ref_coord['dose_basis'])
         valid_unit = coord['concentration_unit'] == ref_coord['concentration_unit']
         # Empty units are identical within this input, but explicitly reported as unspecified.
         if not valid_domain or (coord['absolute'] and not valid_unit):
@@ -382,7 +386,11 @@ def _comparison(prepared, fit_result, rows, details):
         half = 0.0 if same else t.ppf(.975,df)*math.sqrt(variance) if np.isfinite(variance) and df>0 else np.nan
         row['EC50_ratio_CI_low'], row['EC50_ratio_CI_high'] = safe_power10(delta-half),safe_power10(delta+half)
         stock_possible = (coord['input_mode']=='dilution_step' and ref_coord['input_mode']=='dilution_step') or (coord['start_concentration'] is not None and ref_coord['start_concentration'] is not None)
-        if stock_possible:
+        if not coord['absolute'] and coord['dose_basis'] == 'dimensionless':
+            midpoint_log = math.log10(options['reference_assigned_value']) - delta
+            row['Normalized_midpoint_X'] = safe_power10(midpoint_log)
+            row['Normalized_midpoint_X_CI_low'], row['Normalized_midpoint_X_CI_high'] = safe_power10(midpoint_log-half), safe_power10(midpoint_log+half)
+        elif stock_possible:
             offset = math.log10(coord['start_concentration'] or 1.0)-math.log10(ref_coord['start_concentration'] or 1.0)
             stock_log = math.log10(options['reference_assigned_value']) - delta + offset
             row['Relative_stock_potency_X'] = safe_power10(stock_log)
@@ -396,7 +404,7 @@ def _comparison(prepared, fit_result, rows, details):
                 _append_warning(row,detail,'reference EC50 is qualified by fit/range/uncertainty warnings; denominator uncertainty also limits this comparison')
             slope_ratio = abs(detail.params.B / ref_detail.params.B)
             if detail.params.B * ref_detail.params.B < 0:
-                for key in ('EC50_ratio','Relative_stock_potency_X','EC50_ratio_CI_low','EC50_ratio_CI_high','Relative_stock_potency_X_CI_low','Relative_stock_potency_X_CI_high'):
+                for key in ('Normalized_midpoint_X','Normalized_midpoint_X_CI_low','Normalized_midpoint_X_CI_high','EC50_ratio','Relative_stock_potency_X','EC50_ratio_CI_low','EC50_ratio_CI_high','Relative_stock_potency_X_CI_low','Relative_stock_potency_X_CI_high'):
                     row[key] = np.nan
                 _append_warning(row,detail,'comparison unavailable: reference and group have opposite response directions')
             elif slope_ratio < .8 or slope_ratio > 1.25:
@@ -478,6 +486,7 @@ def build_calculation_report(prepared, fit_result):
         notes = list(group['pre_notes'])
         row = {'Group': group['group_name'],'N': group['n_points'],'N_observations': group['n_observations'],
                'N_distinct_doses':group['n_distinct_doses'],'EC50':np.nan,'LogEC50':np.nan,'EC50_step':np.nan,
+               'Normalized_midpoint_X':np.nan,'Normalized_midpoint_X_CI_low':np.nan,'Normalized_midpoint_X_CI_high':np.nan,
                'EC50_unit':group['coordinate']['dose_unit'],'EC50_ratio':np.nan,'Relative_stock_potency_X':np.nan,
                'EC50_ratio_CI_low':np.nan,'EC50_ratio_CI_high':np.nan,'Relative_stock_potency_X_CI_low':np.nan,
                'Relative_stock_potency_X_CI_high':np.nan,'LogEC50_SE':np.nan,'LogEC50_CI_low':np.nan,

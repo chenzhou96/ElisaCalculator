@@ -2,6 +2,13 @@ import type { ReactNode } from "react";
 
 export function Icon({ name, size = 16 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
+    moon: <path d="M20.5 13a9 9 0 0 1-9.5-9.5A9 9 0 1 0 20.5 13Z" />,
+    sun: (
+      <>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5" />
+      </>
+    ),
     data: (
       <>
         <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -77,7 +84,7 @@ export function Field({
   hint?: string;
 }) {
   return (
-    <label className="field">
+    <label className="field" data-field={label}>
       <span>{label}</span>
       {children}
       {hint && <small>{hint}</small>}

@@ -1,9 +1,10 @@
 """Explicit dose-coordinate validation; no inferred physical concentration."""
 import math
 import numpy as np
+from ..arithmetic import evaluate_number
 
 DEFAULT_OPTIONS = {
-    'workflow': 'comparative', 'input_mode': 'dilution_step',
+    'workflow': 'comparative', 'input_mode': 'dilution_step', 'dose_basis': 'stock_fraction',
     'dilution_factor': 2.0, 'dilution_direction': 'increasing', 'first_step': 1.0,
     'start_concentration': None, 'concentration_unit': '', 'fit_mode': 'shared',
     'reference_group': None, 'reference_assigned_value': 1.0,
@@ -12,15 +13,15 @@ DEFAULT_OPTIONS = {
     'allow_extrapolation': False, 'unknown_samples': [],
 }
 COORDINATE_KEYS = ('input_mode', 'dilution_factor', 'dilution_direction', 'first_step',
-                   'start_concentration', 'concentration_unit')
+                   'start_concentration', 'concentration_unit', 'dose_basis')
 
 
 def finite_number(value, name, positive=False):
     if isinstance(value, bool):
         raise ValueError(f'{name} must be a finite number')
     try:
-        number = float(value)
-    except (ValueError, TypeError):
+        number = evaluate_number(value)
+    except (ValueError, TypeError, OverflowError):
         raise ValueError(f'{name} must be a finite number') from None
     if not math.isfinite(number) or (positive and number <= 0):
         raise ValueError(f'{name} must be finite' + (' and positive' if positive else ''))
@@ -36,6 +37,7 @@ def normalize_options(analysis_options=None):
         raise ValueError('unknown analysis option(s): ' + ', '.join(sorted(unknown)))
     for key, choices in {
         'workflow': ('comparative', 'standard_curve'),
+        'dose_basis': ('stock_fraction', 'dimensionless'),
         'input_mode': ('raw_concentration', 'log_concentration', 'dilution_step'),
         'fit_mode': ('shared', 'independent'), 'dilution_direction': ('increasing', 'decreasing'),
         'blank_mode': ('none', 'constant'), 'replicate_mode': ('individual', 'mean'),
@@ -71,7 +73,7 @@ def coordinate_options(options, group_name):
     coordinate = {key: merged[key] for key in COORDINATE_KEYS}
     absolute = coordinate['input_mode'] != 'dilution_step' or coordinate['start_concentration'] is not None
     coordinate['absolute'] = absolute
-    coordinate['dose_unit'] = (coordinate['concentration_unit'] or 'unspecified concentration unit') if absolute else 'relative stock fraction'
+    coordinate['dose_unit'] = (coordinate['concentration_unit'] or 'unspecified concentration unit') if absolute else ('dimensionless dose' if coordinate['dose_basis'] == 'dimensionless' else 'relative stock fraction')
     coordinate['axis_label'] = f"log10 dose ({coordinate['dose_unit']})"
     return coordinate
 

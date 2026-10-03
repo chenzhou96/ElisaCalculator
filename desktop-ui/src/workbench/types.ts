@@ -13,6 +13,7 @@ export interface UnknownInput {
 export interface AnalysisOptions {
   workflow: Workflow;
   input_mode: InputMode;
+  dose_basis?: "stock_fraction" | "dimensionless";
   dilution_factor: number;
   dilution_direction: "increasing" | "decreasing";
   first_step: number;
@@ -41,6 +42,9 @@ export interface SummaryRow {
   EC50_step?: number | null;
   EC50_unit?: string;
   EC50_ratio?: number | null;
+  Normalized_midpoint_X?: number | null;
+  Normalized_midpoint_X_CI_low?: number | null;
+  Normalized_midpoint_X_CI_high?: number | null;
   Relative_stock_potency_X?: number | null;
   LogEC50_SE?: number | null;
   LogEC50_CI_low?: number | null;

@@ -20,6 +20,7 @@ function parseOptions(value: unknown): AnalysisOptions {
   )
     throw new Error("记录中的分析模式无效");
   if (
+    !["stock_fraction", "dimensionless"].includes(opts.dose_basis ?? "stock_fraction") ||
     !["shared", "independent"].includes(opts.fit_mode) ||
     !["increasing", "decreasing"].includes(opts.dilution_direction) ||
     !["none", "constant"].includes(opts.blank_mode) ||
@@ -57,7 +58,7 @@ export function serializeRecord(state: Workspace) {
   return JSON.stringify(
     {
       schema: RECORD_SCHEMA,
-      app_version: "0.2.0",
+      app_version: "0.2.3",
       saved_at: new Date().toISOString(),
       inputs: {
         inputView: state.inputView,

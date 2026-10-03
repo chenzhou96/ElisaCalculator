@@ -7,9 +7,11 @@ import type {
   UnknownInput,
 } from "./types";
 
+import { evaluateList, evaluateNumber } from "./arithmetic.ts";
 import { createPlate, compilePlate, curveGroups, plateExample, type PlateDocument } from "./plate.ts";
 
 export const defaultOptions: AnalysisOptions = {
+  dose_basis: "stock_fraction",
   workflow: "comparative",
   input_mode: "dilution_step",
   dilution_factor: 2,
@@ -417,16 +419,15 @@ export function buildOptions(state: Workspace): AnalysisOptions {
     if (!state.unknowns.length) throw new Error("请添加至少一个未知样品");
     const names = new Set<string>();
     options.unknown_samples = state.unknowns.map((sample) => {
-      const od = sample.od
-        .split(/[;,，；\s]+/)
-        .filter(Boolean)
-        .map(Number);
+      let od: number[];
+      try {od = evaluateList(sample.od);} catch {throw new Error(`${sample.sample}：请输入有效 OD；支持四则运算，重复孔用分号分隔`); }
       if (!sample.sample.trim() || names.has(sample.sample.trim()))
         throw new Error("未知样品名称不能为空或重复");
       names.add(sample.sample.trim());
       if (!od.length || od.some((value) => !Number.isFinite(value)))
         throw new Error(`${sample.sample}：请输入有效 OD；重复孔用分号分隔`);
-      const dilution = Number(sample.dilution);
+      let dilution: number;
+      try {dilution = evaluateNumber(sample.dilution);} catch {throw new Error(`${sample.sample}：稀释校正倍数必须至少为 1`);}
       if (!Number.isFinite(dilution) || dilution < 1)
         throw new Error(`${sample.sample}：稀释校正倍数必须至少为 1`);
       return { sample_id: sample.sample.trim(), od, dilution_factor: dilution };

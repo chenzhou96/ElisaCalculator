@@ -2,6 +2,15 @@ from io import StringIO
 import re
 
 import pandas as pd
+from ..arithmetic import evaluate_number
+
+def _is_number(value):
+    try:
+        evaluate_number(value)
+        return True
+    except (ValueError, TypeError, OverflowError):
+        return False
+
 
 
 def _token_count(line, sep):
@@ -69,8 +78,8 @@ def read_table_from_raw_text(raw_text, header_mode='auto'):
     # Inspect the first row rather than requiring every later x to be valid.
     # Later bad/missing cells belong in the input audit, not in header inference.
     first = preview_df.iloc[0]
-    numeric_first_x = pd.notna(pd.to_numeric(first.iloc[0], errors='coerce'))
-    numeric_responses = pd.to_numeric(first.iloc[1:], errors='coerce').notna().any()
+    numeric_first_x = _is_number(first.iloc[0])
+    numeric_responses = any(_is_number(value) for value in first.iloc[1:])
     has_header = header_mode == 'present' or (header_mode == 'auto' and not numeric_first_x and not numeric_responses)
     warnings = []
     if header_mode == 'auto' and not numeric_first_x and numeric_responses:

@@ -1,5 +1,7 @@
 import json
 import os
+import subprocess
+import sys
 import unittest
 
 from elisa_calculator.bridge import handle_request, _serialize_response_bytes
@@ -80,6 +82,21 @@ class TestBridge(unittest.TestCase):
         decoded = encoded.decode('utf-8')
         self.assertIn('浓度', decoded)
         self.assertIn('检测到表头', decoded)
+
+    def test_cli_reads_utf8_json_independently_of_console_encoding(self):
+        request = {'command': 'parse', 'raw_text': '剂量,参比,样品\r\n1,.2,.3\r\n2,.4,.5', 'header_mode': 'present'}
+        result = subprocess.run(
+            [sys.executable, '-m', 'elisa_calculator.bridge'],
+            input=json.dumps(request, ensure_ascii=False).encode('utf-8'),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            cwd=os.path.dirname(os.path.dirname(__file__)),
+            env={**os.environ, 'PYTHONIOENCODING': 'cp1252', 'PYTHONUTF8': '0'},
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode('utf-8', errors='replace'))
+        response = json.loads(result.stdout.decode('utf-8'))
+        self.assertTrue(response['ok'], response.get('error'))
+        self.assertEqual(response['columns'], ['剂量', '参比', '样品'])
 
 
 if __name__ == '__main__':

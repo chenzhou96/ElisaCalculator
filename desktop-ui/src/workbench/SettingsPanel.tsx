@@ -2,6 +2,7 @@ import type { Dispatch } from "react";
 import { availableGroups, type Action, type Workspace } from "./model";
 import type { AnalysisOptions, InputMode } from "./types";
 import { Card, Field } from "./Primitives";
+import NumericInput from "./NumericInput";
 import { PlateAnalysisControls } from "./PlatePanel";
 
 export default function SettingsPanel({
@@ -39,23 +40,19 @@ export default function SettingsPanel({
           <>
             <div className="field-grid">
               <Field label="每级稀释倍数">
-                <input
-                  type="number"
+                <NumericInput
                   min="2"
                   max="10"
                   step="any"
                   value={finite(options.dilution_factor)}
-                  onChange={(e) =>
-                    set({ dilution_factor: number(e.target.value) })
-                  }
+                  onValueChange={value => set({ dilution_factor: value ?? NaN })}
                 />
               </Field>
               <Field label="首个级数">
-                <input
-                  type="number"
+                <NumericInput
                   step="any"
                   value={finite(options.first_step)}
-                  onChange={(e) => set({ first_step: number(e.target.value) })}
+                  onValueChange={value => set({ first_step: value ?? NaN })}
                 />
               </Field>
             </div>
@@ -77,8 +74,7 @@ export default function SettingsPanel({
               label="起始浓度（可选）"
               hint="留空仅计算相对剂量，不推断绝对浓度"
             >
-              <input
-                type="number"
+              <NumericInput
                 min="0"
                 step="any"
                 value={
@@ -87,12 +83,7 @@ export default function SettingsPanel({
                     : finite(options.start_concentration)
                 }
                 placeholder="未知，保留相对剂量"
-                onChange={(e) =>
-                  set({
-                    start_concentration:
-                      e.target.value === "" ? null : number(e.target.value),
-                  })
-                }
+                optional onValueChange={value => set({start_concentration: value})}
               />
             </Field>
           </>
@@ -170,15 +161,12 @@ export default function SettingsPanel({
             </Field>
             {options.workflow === "comparative" && (
               <Field label="参考组赋值（X）">
-                <input
-                  type="number"
+                <NumericInput
                   min="0"
                   step="any"
                   list="reference-presets"
                   value={finite(options.reference_assigned_value)}
-                  onChange={(e) =>
-                    set({ reference_assigned_value: number(e.target.value) })
-                  }
+                  onValueChange={value => set({ reference_assigned_value: value ?? NaN })}
                 />
                 <datalist id="reference-presets">
                   <option value="1" />
@@ -228,12 +216,11 @@ export default function SettingsPanel({
               </select>
             </Field>
             <Field label="空白 OD">
-              <input
-                type="number"
+              <NumericInput
                 step="any"
                 disabled={options.blank_mode === "none"}
                 value={finite(options.blank_value)}
-                onChange={(e) => set({ blank_value: number(e.target.value) })}
+                onValueChange={value => set({ blank_value: value ?? NaN })}
               />
             </Field>
           </div>
@@ -271,9 +258,6 @@ export default function SettingsPanel({
       </div>
     </div>
   );
-}
-function number(value: string) {
-  return value === "" ? Number.NaN : Number(value);
 }
 function finite(value: number) {
   return Number.isFinite(value) ? value : "";

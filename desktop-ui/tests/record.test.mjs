@@ -12,7 +12,7 @@ test('portable analysis record roundtrip preserves input options and stores the 
   const serialized = serializeRecord(state)
   const data = JSON.parse(serialized)
   assert.equal(data.schema, RECORD_SCHEMA)
-  assert.equal(data.app_version, '0.2.0')
+  assert.equal(data.app_version, '0.2.3')
   assert.deepEqual(data.result, state.result)
   const restored = parseRecord(serialized)
   assert.equal(restored.rawText, state.rawText)

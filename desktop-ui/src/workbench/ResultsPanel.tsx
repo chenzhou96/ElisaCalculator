@@ -23,6 +23,7 @@ export default function ResultsPanel({
         完成数据预览与分析设置，然后点击“运行分析”
       </Empty>
     );
+  const dimensionless = state.result?.report?.options?.dose_basis === "dimensionless";
   const standard = state.options.workflow === "standard_curve";
   const showUnknown = standard && tab === "unknown";
   const count = showUnknown ? unknowns.length : rows.length;
@@ -86,7 +87,7 @@ export default function ResultsPanel({
         subtitle={
           showUnknown
             ? "孔内值与稀释校正值分别列出；不可反算项显示为空"
-            : "EC50 比值 = 样品 / 参考；X 为表观中点强度，平行性与恒定效价未被证明"
+            : dimensionless ? "无量纲剂量；中点相对值 = 参考赋值 × 参考 EC50 / 样品 EC50" : "EC50 比值 = 样品 / 参考；X 为表观中点强度，平行性与恒定效价未被证明"
         }
         className="results-card"
         action={
@@ -137,7 +138,7 @@ export default function ResultsPanel({
                     EC50 比值<small>样品 / 参考</small>
                   </th>
                   <th>
-                    中点原液强度<small>参考归一 X</small>
+                    {dimensionless ? "中点相对值" : "中点原液强度"}<small>参考归一 X</small>
                   </th>
                   <th>R²</th>
                   <th>状态</th>
@@ -202,8 +203,8 @@ export default function ResultsPanel({
                       <td>{fmt(row.EC50_step)}</td>
                       <td>{fmt(row.EC50_ratio)}</td>
                       <td className="value-cell">
-                        {fmt(row.Relative_stock_potency_X)}
-                        {row.Relative_stock_potency_X != null ? " X" : ""}
+                        {fmt(dimensionless ? row.Normalized_midpoint_X : row.Relative_stock_potency_X)}
+                        {(dimensionless ? row.Normalized_midpoint_X : row.Relative_stock_potency_X) != null ? " X" : ""}
                       </td>
                       <td>{fmt(row.R2, 4)}</td>
                       <td>
@@ -229,7 +230,7 @@ export default function ResultsPanel({
         <p>
           {standard
             ? "标准曲线只支持当前单位和校准范围。稀释、基质效应与拟合不确定性仍需实验验证。"
-            : "相对原液强度只适用于可比较的连续稀释设计；原始浓度曲线未声明原液浓度时，该项不推断。EC50 比值不等同于活性或亲和力的完整结论。"}
+            : dimensionless ? "剂量是无量纲正数，可以大于 1。中点相对值仅比较当前剂量标尺下的 EC50，不推断原液分数、物理浓度或恒定效价。" : "相对原液强度只适用于可比较的连续稀释设计；原始浓度曲线未声明原液浓度时，该项不推断。EC50 比值不等同于活性或亲和力的完整结论。"}
         </p>
       </div>
     </div>

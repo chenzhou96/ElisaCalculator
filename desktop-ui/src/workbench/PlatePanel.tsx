@@ -1,32 +1,33 @@
 import { useEffect, useRef, useState, type Dispatch, type CSSProperties } from "react";
 import type { Action, Workspace } from "./model";
 import { formatNumber } from "./model";
+import NumericInput from "./NumericInput";
 import { Field } from "./Primitives";
+import type { InputProblem } from "./validation";
 import { applyPaste, assignWells, compilePlate, coordinates, curveGroups, KIND_LABELS, numericOD, plateExample, previewPaste, rectangleIds, ROWS, selectWells, WELL_IDS, type Assignment, type PlateDocument, type PlateWell, type WellKind } from "./plate";
 
 const DEFAULT_ASSIGNMENT: Assignment = {kind: "comparison", group: "Reference", start: 1, factor: 2, direction: "decreasing", axis: "column", spacing: "physical", dilution: 1};
-const symbol: Record<WellKind, string> = {unassigned: "·", comparison: "C", standard: "S", unknown: "U", blank: "B", excluded: "×"};
 function color(plate: PlateDocument, well: PlateWell): CSSProperties {
-  if (well.kind === "excluded") return {background: "#f0f1f0", color: "#9ca39e"};
-  if (well.kind === "unassigned") return {background: "#fafbf9"};
-  if (well.kind === "blank") return {background: "#eee8f4", color: "#705b87"};
+  if (well.kind === "excluded") return {background: "var(--well-excluded, #f0f1f0)", color: "var(--text-soft, #9ca39e)"};
+  if (well.kind === "unassigned") return {background: "var(--well-empty, #fafbf9)"};
+  if (well.kind === "blank") return {background: "var(--well-blank, #eee8f4)", color: "var(--well-blank-text, #705b87)"};
   let hash = 0;
   for (const character of well.group) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
   const hue = [144, 207, 32, 283, 175, 355, 82][hash % 7];
   const doses = plate.wells.filter(w => w.group === well.group && w.dose && w.kind !== "excluded").map(w => Math.log10(w.dose!));
   const low = Math.min(...doses), high = Math.max(...doses);
   const strength = well.dose && high > low ? (Math.log10(well.dose) - low) / (high - low) : 0.45;
-  return {background: `hsl(${hue} 36% ${93 - strength * 21}%)`, color: `hsl(${hue} 30% 24%)`};
+  return {"--well-hue": hue, "--well-strength": strength} as CSSProperties;
 }
 export function PlateAnalysisControls({state, dispatch}: {state: Workspace; dispatch: Dispatch<Action>}) {
   const p = state.plate, groups = curveGroups(p), standard = state.options.workflow === "standard_curve";
   const update = (patch: Partial<PlateDocument>) => dispatch({type: "plate", plate: {...p, ...patch}});
   return <div className="plate-analysis-controls">
     <div className="field-grid">
-      <Field label="孔板剂量单位"><select value={p.basis} onChange={e => update({basis: e.target.value as PlateDocument["basis"]})}><option value="relative">相对原液分数（1 = 原液）</option><option value="absolute">已知绝对浓度</option></select></Field>
-      <Field label="板图浓度单位"><input value={p.basis === "relative" ? "无量纲（原液 = 1）" : p.unit} disabled={p.basis === "relative"} onChange={e => update({unit: e.target.value})} placeholder="ng/mL、nM" /></Field>
+      <Field label="孔板剂量单位"><select value={p.basis} onChange={e => update({basis: e.target.value as PlateDocument["basis"]})}><option value="relative">无量纲剂量</option><option value="absolute">已知绝对浓度</option></select></Field>
+      <Field label="板图浓度单位"><input value={p.basis === "relative" ? "无量纲" : p.unit} disabled={p.basis === "relative"} onChange={e => update({unit: e.target.value})} placeholder="ng/mL、nM" /></Field>
       <Field label={standard ? "板图标准曲线引用" : "板图参比组"}><select value={(standard ? state.options.standard_group : state.options.reference_group) ?? ""} onChange={e => dispatch({type: "options", patch: standard ? {standard_group: e.target.value || null} : {reference_group: e.target.value || null}})}><option value="">请选择组</option>{groups.map(g => <option key={g}>{g}</option>)}</select></Field>
-      {!standard && <Field label="板图参比赋值（X）"><input type="number" min="0" step="any" value={state.options.reference_assigned_value} onChange={e => dispatch({type: "options", patch: {reference_assigned_value: Number(e.target.value)}})} /></Field>}
+      {!standard && <Field label="板图参比赋值（X）"><NumericInput min="0" step="any" value={state.options.reference_assigned_value} onValueChange={value => dispatch({type: "options", patch: {reference_assigned_value: value ?? NaN}})} /></Field>}
       <Field label="板图4PL拟合模式"><select value={state.options.fit_mode} onChange={e => dispatch({type: "options", patch: {fit_mode: e.target.value as "shared" | "independent"}})}><option value="shared">共享上下平台 A / D</option><option value="independent">各组独立 4PL</option></select></Field>
       <Field label="复孔拟合策略"><select value={p.replicateMode} onChange={e => update({replicateMode: e.target.value as PlateDocument["replicateMode"]})}><option value="individual">逐孔拟合 · 观测等权</option><option value="mean">每剂量均值 · 均值等权</option></select></Field>
     </div>
@@ -34,10 +35,10 @@ export function PlateAnalysisControls({state, dispatch}: {state: Workspace; disp
     <p className="plate-policy">{p.blankMode === "none" ? "原始 OD 直接送入引擎，空白孔不参与拟合。" : p.blankMode === "global" ? "所有有效空白孔取均值，每个拟合/未知孔仅扣一次。原始读数永久保留，负值不裁零。" : "空白孔的组名指定作用对象（曲线组或未知样品名）。缺少同名空白会阻止计算，不回退全板。"}</p>
     <p className="plate-policy">{p.replicateMode === "individual" ? "同组重复列显式合并，保留逐孔身份；每个有效观测等权，技术复孔不等于独立实验。" : "保留逐孔审计，先取每剂量 OD 均值，再等权拟合各剂量；不按复孔数加权。"}</p>
     {standard && <label className="plate-checkbox"><input type="checkbox" checked={state.options.allow_extrapolation} onChange={e => dispatch({type: "options", patch: {allow_extrapolation: e.target.checked}})} />允许超范围外推（标记警告）</label>}
-    <p className="plate-policy">剂量由各孔已确认的梯度生成；各组独立。相对模式的 1 明确代表原液分数 1；绝对浓度没有原液浓度时只比较 EC50，不计算原液 X。中点倍率不证明恒定效价。板图和表格分别保留。</p>
+    <p className="plate-policy">剂量由各孔已确认的梯度生成；各组独立。无量纲剂量可为任意正数，不代表原液分数；中点相对值按参比赋值 × 参比 EC50 / 样品 EC50 计算。绝对浓度没有原液浓度时只比较 EC50，不计算原液 X。中点倍率不证明恒定效价。板图和表格分别保留。</p>
   </div>;
 }
-export default function PlatePanel({state, dispatch, parse}: {state: Workspace; dispatch: Dispatch<Action>; parse: () => void}) {
+export default function PlatePanel({state, dispatch, parse, problem}: {state: Workspace; dispatch: Dispatch<Action>; parse: () => void; problem?: InputProblem | null}) {
   const p = state.plate;
   const [panel, setPanel] = useState<"assign" | "analysis">("assign");
   const [draft, setDraft] = useState<Assignment>({...DEFAULT_ASSIGNMENT, kind: state.options.workflow === "standard_curve" ? "standard" : "comparison"});
@@ -53,6 +54,8 @@ export default function PlatePanel({state, dispatch, parse}: {state: Workspace; 
   const existing = preview?.cells.filter(c => p.wells.find(w => w.id === c.id)?.raw !== "").length ?? 0;
   const invalid = preview?.cells.filter(c => c.issue === "invalid").length ?? 0;
   const missing = preview?.cells.filter(c => c.issue === "missing").length ?? 0;
+  const analysisProblem = problem?.fields.some(f => /^(板图|孔板|空白校正)/.test(f));
+  const activePanel = panel;
   const curve = draft.kind === "comparison" || draft.kind === "standard";
   let proposed: PlateDocument | null = null, draftError = "";
   try {if (selected.length) proposed = assignWells(p, p.selected, draft);} catch (e) {draftError = e instanceof Error ? e.message : String(e);}
@@ -62,6 +65,18 @@ export default function PlatePanel({state, dispatch, parse}: {state: Workspace; 
     window.addEventListener("pointerup", end); window.addEventListener("pointercancel", end);
     return () => {window.removeEventListener("pointerup", end); window.removeEventListener("pointercancel", end);};
   }, []);
+  useEffect(() => {
+    if (!problem) return;
+    // Open the editor that contains the invalid control.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPanel(analysisProblem ? "analysis" : "assign");
+    if (!problem.wells.length) return;
+    const w = p.wells.find(w => w.id === problem.wells[0]);
+    if (w) {
+      // Synchronize the editor with the well selected by validation.
+      setDraft({...DEFAULT_ASSIGNMENT, kind: w.kind, group: w.group, dilution: w.dilution, ...(w.gradient ?? {}), start: w.dose ?? 1});
+    }
+  }, [problem, p.wells, analysisProblem]);
   const selection = (next: PlateDocument) => dispatch({type: "plate-selection", selected: next.selected, anchor: next.anchor});
   function choose(id: string, shift = false, additive = false) {selection(selectWells(p, id, shift ? "range" : additive ? "toggle" : "single"));}
   function openPaste(text = "", origin = p.selected[0] ?? "A1") {setOverwrite(false); setAllowInvalid(false); setError(""); setPaste({text, origin, delimiter: "tab"});}
@@ -95,7 +110,7 @@ export default function PlatePanel({state, dispatch, parse}: {state: Workspace; 
     e.preventDefault(); openPaste(e.clipboardData.getData("text/plain"));
   }}>
     <section className="card plate-board-card">
-      <header className="plate-toolbar"><div><h2>96 孔板 <span className="mini-tag">8 × 12</span></h2><p>Excel 原始读数 → 明确孔位 → 检查映射</p></div><div className="button-row">
+      <header className="plate-toolbar"><div><h2>96 孔板 <span className="mini-tag">8 × 12</span></h2><p>粘贴读数 → 标记组别与剂量 → 运行分析</p></div><div className="button-row">
         <button onClick={() => openPaste()}>粘贴读数</button><button onClick={() => file.current?.click()} disabled={!!state.busy}>导入板读数</button>
         <button onClick={() => {const next = {type: "plate-example", workflow: state.options.workflow} as const; if (p.wells.some(w => w.raw || w.kind !== "unassigned")) setConfirmation({plate: plateExample(state.options.workflow), version: state.version, label: "载入合成示例将替换当前板图及分析约定；可用撤销恢复原板图。", example: state.options.workflow}); else dispatch(next);}}>载入板示例</button>
       </div></header>
@@ -112,29 +127,29 @@ export default function PlatePanel({state, dispatch, parse}: {state: Workspace; 
         {[...ROWS].map((r, row) => <div className="plate-grid-row" role="row" key={r}><button className="plate-row" aria-label={`选择 ${r} 行`} onClick={() => selection({...p, selected: Array.from({length: 12}, (_, c) => `${r}${c + 1}`), anchor: `${r}1`})}>{r}</button>{p.wells.slice(row * 12, row * 12 + 12).map(w => {
           const valid = numericOD(w.raw), selected = p.selected.includes(w.id);
           const label = `${w.id} ${KIND_LABELS[w.kind]} ${w.group} OD ${w.raw.trim() || "缺失"}${w.dose !== null ? ` 剂量 ${w.dose}` : w.kind === "unknown" ? ` 稀释校正 ${w.dilution}` : ""}`;
-          return <div className="plate-cell" role="gridcell" aria-selected={selected} key={w.id}><button data-well={w.id} tabIndex={p.anchor === w.id ? 0 : -1} className={`well ${selected ? "selected" : ""} ${w.raw.trim() && valid === null ? "invalid" : ""} ${w.kind === "excluded" ? "excluded" : ""}`} style={color(p, w)} aria-label={label} title={label} onPointerDown={e => {if (e.button !== 0) return; beginDrag(w.id, e.shiftKey, e.metaKey || e.ctrlKey);}} onClick={e => {if (e.detail === 0) choose(w.id, e.shiftKey, e.metaKey || e.ctrlKey);}} onKeyDown={e => {
+          return <div className="plate-cell" role="gridcell" aria-selected={selected} key={w.id}><button data-well={w.id} aria-invalid={problem?.wells.includes(w.id) || undefined} aria-describedby={problem?.wells.includes(w.id) ? "input-error" : undefined} tabIndex={p.anchor === w.id ? 0 : -1} className={`well ${selected ? "selected" : ""} ${w.raw.trim() && valid === null ? "invalid" : ""} ${w.kind === "excluded" ? "excluded" : ""}`} style={color(p, w)} aria-label={label} title={label} onPointerDown={e => {if (e.button !== 0) return; beginDrag(w.id, e.shiftKey, e.metaKey || e.ctrlKey);}} onClick={e => {if (e.detail === 0) choose(w.id, e.shiftKey, e.metaKey || e.ctrlKey);}} onKeyDown={e => {
             if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
             e.preventDefault(); const [r, c] = coordinates(w.id), nextRow = Math.max(0, Math.min(7, r + (e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0))), nextCol = Math.max(0, Math.min(11, c + (e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0)));
             const id = `${ROWS[nextRow]}${nextCol + 1}`; choose(id, e.shiftKey); e.currentTarget.closest(".plate-grid")?.querySelector<HTMLButtonElement>(`[data-well="${id}"]`)?.focus();
-          }}><span className="well-top"><small>{w.id}</small><em>{symbol[w.kind]}</em></span><strong>{valid === null ? w.raw.trim() ? "!" : "—" : formatNumber(valid, 4)}</strong><span className="well-label">{w.kind === "excluded" ? "排除" : w.dose !== null ? `${formatNumber(w.dose, 3)}` : w.kind === "unknown" ? `DF ${w.dilution}` : w.group || (w.kind === "blank" ? "空白" : "")}</span></button></div>;
+          }}><span className="well-top"><small>{w.id}</small><em>{w.kind === "unassigned" ? "·" : KIND_LABELS[w.kind].replace("曲线", "").replace("样品", "")}</em></span><span className="well-group" title={w.group}>{w.group || (w.kind === "blank" ? "空白" : w.kind === "excluded" ? "已排除" : "未标记")}</span><strong>{valid === null ? w.raw.trim() ? "!" : "—" : formatNumber(valid, 4)}</strong><span className="well-label">{w.kind === "excluded" ? "不参与计算" : w.dose !== null ? `${p.basis === "relative" ? "剂量" : p.unit} ${formatNumber(w.dose, 3)}` : w.kind === "unknown" ? `DF ${w.dilution}` : w.kind === "blank" ? "空白校正" : ""}</span></button></div>;
         })}</div>)}
       </div>
-      <div className="plate-legend">{curveGroups(p).map(group => <span key={group} title={group}><i style={color(p, p.wells.find(w => w.group === group)!)} />{group}</span>)}<span><i className="legend-blank" />B 空白</span><span>U 未知</span><span>× 排除</span><small>同组同色 · 深色剂量高 · C 比较 / S 标准</small></div>
+      <div className="plate-legend">{curveGroups(p).map(group => <span key={group} title={group}><i className="group-swatch" style={{...color(p, p.wells.find(w => w.group === group && ["comparison", "standard"].includes(w.kind))!), "--well-strength": 1} as CSSProperties} />{group}</span>)}<span><i className="legend-blank" />B 空白</span><span>U 未知</span><span>× 排除</span><small>同组同色 · 深色剂量高 · C 比较 / S 标准</small></div>
       <footer className="plate-check-bar"><div><b>{compiled.ok ? "映射可计算" : `${compiled.errors.length} 项待检查`}</b><span>{p.wells.filter(w => numericOD(w.raw) !== null).length} / 96 有效读数 · {compiled.groups.length} 拟合组 · 原始值保留</span><small title={compiled.errors.join("\n")}>{compiled.errors[0] || compiled.warnings[0] || "孔位、组别、浓度和复孔已明确"}</small></div><button className="secondary" onClick={() => setReview(true)}>检查孔位映射</button></footer>
     </section>
-    <aside className="card plate-editor"><div className="plate-editor-tabs" role="tablist" aria-label="孔板设置"><button role="tab" aria-selected={panel === "assign"} onClick={() => setPanel("assign")}>标记选中孔</button><button role="tab" aria-selected={panel === "analysis"} onClick={() => setPanel("analysis")}>分析约定</button></div><div className="plate-editor-body">
-      {panel === "analysis" ? <PlateAnalysisControls state={state} dispatch={dispatch} /> : <>
+    <aside className="card plate-editor"><div className="plate-editor-tabs" role="tablist" aria-label="孔板设置"><button role="tab" aria-selected={activePanel === "assign"} onClick={() => setPanel("assign")}>标记选中孔</button><button role="tab" aria-selected={activePanel === "analysis"} onClick={() => setPanel("analysis")}>分析约定</button></div><div className="plate-editor-body">
+      {activePanel === "analysis" ? <PlateAnalysisControls state={state} dispatch={dispatch} /> : <>
         <Field label="孔类型"><select value={draft.kind} onChange={e => setDraft({...draft, kind: e.target.value as WellKind})}>{Object.entries(KIND_LABELS).map(([kind, label]) => <option value={kind} key={kind}>{label}</option>)}</select></Field>
         {!["unassigned", "excluded"].includes(draft.kind) && <Field label={draft.kind === "blank" ? "空白作用组（同组模式必填）" : "组名 / 样品名"}><input value={draft.group} onChange={e => setDraft({...draft, group: e.target.value})} /></Field>}
-        {curve && <><div className="field-grid"><Field label="起始量 / 浓度"><input type="number" min="0" step="any" value={draft.start} onChange={e => setDraft({...draft, start: Number(e.target.value)})} /></Field><Field label="梯度稀释倍数"><input type="number" min="2" max="10" step="any" value={draft.factor} onChange={e => setDraft({...draft, factor: Number(e.target.value)})} /></Field></div>
+        {curve && <><div className="field-grid"><Field label="起始量 / 浓度"><NumericInput min="0" step="any" value={draft.start} onValueChange={value => setDraft({...draft, start: value ?? NaN})} /></Field><Field label="梯度稀释倍数"><NumericInput min="2" max="10" step="any" value={draft.factor} onValueChange={value => setDraft({...draft, factor: value ?? NaN})} /></Field></div>
           <Field label="梯度板方向"><select value={draft.axis} onChange={e => setDraft({...draft, axis: e.target.value as Assignment["axis"]})}><option value="column">每列从上到下 · 各列重新起始</option><option value="row">每行从左到右 · 各行重新起始</option></select></Field>
           <div className="field-grid"><Field label="浓度方向"><select value={draft.direction} onChange={e => setDraft({...draft, direction: e.target.value as Assignment["direction"]})}><option value="decreasing">浓度递减 ↓</option><option value="increasing">浓度递增 ↑</option></select></Field><Field label="跨空位处理"><select value={draft.spacing} onChange={e => setDraft({...draft, spacing: e.target.value as Assignment["spacing"]})}><option value="physical">按物理位置保留间隔</option><option value="compact">仅选中孔连续编号</option></select></Field></div>
           <div className="gradient-preview" title={previewDoses}><small>应用前梯度预览 · 不依赖点击次序</small><p>{draftError || previewDoses || "选择一列或区域即可预览梯度"}</p></div>
         </>}
-        {draft.kind === "unknown" && <><Field label="未知样品稀释校正倍数"><input type="number" min="1" step="any" value={draft.dilution} onChange={e => setDraft({...draft, dilution: Number(e.target.value)})} /></Field><p className="plate-policy">同名未知孔作为 OD 复孔；仅经明确标准曲线反算，稀释倍数最后乘一次，不进入标曲拟合。</p></>}
+        {draft.kind === "unknown" && <><Field label="未知样品稀释校正倍数"><NumericInput min="1" step="any" value={draft.dilution} onValueChange={value => setDraft({...draft, dilution: value ?? NaN})} /></Field><p className="plate-policy">同名未知孔作为 OD 复孔；仅经明确标准曲线反算，稀释倍数最后乘一次，不进入标曲拟合。</p></>}
         {draft.kind === "blank" && <p className="plate-policy">空白孔不进入拟合。是否扣除与作用域，请在“分析约定”明确选择。</p>}
         <button className="primary assign-button" disabled={!selected.length || !!draftError} onClick={applyAssignment}>应用到选中孔</button>
-        <div className="well-edit"><h3>原始读数</h3>{selected.length === 1 ? <Field label={`${selected[0].id} 原始 OD`}><input aria-label={`${selected[0].id} 原始 OD`} value={selected[0].raw} onChange={e => commit({...p, wells: p.wells.map(w => w.id === selected[0].id ? {...w, raw: e.target.value} : w)})} /><small>空白输入是缺失，0 是有效读数；可保留非法文本后排除。</small></Field> : <p>选择单孔可编辑；多孔粘贴先预览后整体应用。</p>}
+        <div className="well-edit"><h3>原始读数</h3>{selected.length === 1 ? <Field label={`${selected[0].id} 原始 OD`}><NumericInput key={selected[0].id} aria-label={`${selected[0].id} 原始 OD`} value={selected[0].raw} onTextChange={value => commit({...p, wells: p.wells.map(w => w.id === selected[0].id ? {...w, raw: value} : w)})} /><small>空白输入是缺失，0 是有效读数；可保留非法文本后排除。</small></Field> : <p>选择单孔可编辑；多孔粘贴先预览后整体应用。</p>}
         {selected.length > 0 && <button onClick={() => {const w = selected[0]; setDraft({...DEFAULT_ASSIGNMENT, kind: w.kind, group: w.group, dilution: w.dilution, ...(w.gradient ?? {})});}}>读取选中孔标记设置</button>}</div>
       </>}
     </div><p className="plate-keyboard">⌘ / Ctrl 单击多选 · Shift 矩形扩选<br />拖动框选 · 列号整列选 · 箭头键移动</p></aside>

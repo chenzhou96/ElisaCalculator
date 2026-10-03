@@ -1,19 +1,23 @@
+import NumericInput from "./NumericInput";
 import { useState, type Dispatch } from "react";
 import type { Action, Workspace } from "./model";
 import type { UnknownInput } from "./types";
+import type { InputProblem } from "./validation";
 import { Card, Pager } from "./Primitives";
 
 export default function UnknownPanel({
   state,
   dispatch,
+  problem,
 }: {
   state: Workspace;
   dispatch: Dispatch<Action>;
+  problem?: InputProblem | null;
 }) {
   const [page, setPage] = useState(0);
   const size = 6;
   const safePage = Math.min(
-    page,
+    problem?.sampleIndex !== undefined ? Math.floor(problem.sampleIndex / size) : page,
     Math.max(0, Math.ceil(state.unknowns.length / size) - 1),
   );
   function update(id: string, patch: Partial<UnknownInput>) {
@@ -71,25 +75,20 @@ export default function UnknownPanel({
                       />
                     </td>
                     <td>
-                      <input
+                      <NumericInput replicates
                         aria-label={`样品 OD ${safePage * size + index + 1}`}
                         placeholder="例如 0.82; 0.86"
                         value={sample.od}
-                        onChange={(e) =>
-                          update(sample.id, { od: e.target.value })
-                        }
+                        onTextChange={value => update(sample.id, { od: value })}
                       />
                     </td>
                     <td>
-                      <input
+                      <NumericInput
                         aria-label={`样品稀释倍数 ${safePage * size + index + 1}`}
-                        type="number"
                         min="1"
                         step="any"
                         value={sample.dilution}
-                        onChange={(e) =>
-                          update(sample.id, { dilution: e.target.value })
-                        }
+                        onTextChange={value => update(sample.id, { dilution: value })}
                       />
                     </td>
                     <td>

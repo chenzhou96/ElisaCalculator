@@ -227,7 +227,9 @@ def _load_json_request(args):
         with open(args.request_file, 'r', encoding='utf-8') as fh:
             return json.load(fh)
 
-    raw = sys.stdin.read()
+    # The desktop bridge sends UTF-8 bytes regardless of the Windows console
+    # code page or the frozen interpreter's environment-variable handling.
+    raw = sys.stdin.buffer.read().decode('utf-8')
     if not raw.strip():
         return {}
     return json.loads(raw)

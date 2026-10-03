@@ -1,7 +1,7 @@
 {
   "name": "desktop-ui",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,7 +16,7 @@
     "tauri:prepare:offline-tools": "powershell -ExecutionPolicy Bypass -File ./scripts/prepare-offline-tools.ps1",
     "tauri:build:nsis:offline": "tauri build --bundles nsis",
     "tauri:build:msi:offline": "tauri build --bundles msi",
-    "test": "node --experimental-strip-types --test tests/model.test.mjs tests/record.test.mjs tests/plate.test.mjs tests/browser-config.test.mjs",
+    "test": "node --experimental-strip-types --test tests/model.test.mjs tests/record.test.mjs tests/plate.test.mjs tests/browser-config.test.mjs tests/arithmetic.test.mjs",
     "test:e2e": "playwright test",
     "test:integration": "node --test tests/dom.integration.test.mjs",
     "test:plate-science": "node --experimental-strip-types --test tests/plate.science.test.mjs"
