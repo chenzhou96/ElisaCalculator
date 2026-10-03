@@ -455,7 +455,7 @@ export default function Workbench() {
           <Icon name={theme === "dark" ? "sun" : "moon"} size={15} />
           {theme === "dark" ? "日间" : "夜间"}
         </button>
-        <span className="version-tag">v0.3.0</span>
+        <span className="version-tag">v0.3.1</span>
         {native && (
           <div className="window-buttons">
             <button
@@ -496,6 +496,8 @@ export default function Workbench() {
               {pages.map((page, index) => (
                 <button
                   key={page}
+                  aria-label={pageNames[page]}
+                  title={pageNames[page]}
                   className={state.page === page ? "selected" : ""}
                   onClick={() => dispatch({ type: "page", page })}
                 >
@@ -511,6 +513,8 @@ export default function Workbench() {
             </nav>
             <div className="nav-bottom">
               <button
+                aria-label="使用说明"
+                title="使用说明"
                 className={state.page === "guide" ? "selected" : ""}
                 onClick={() => dispatch({ type: "page", page: "guide" })}
               >

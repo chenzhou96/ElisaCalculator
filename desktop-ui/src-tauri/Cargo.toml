@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.3.0"
+version = "0.3.1"
 description = "ELISA 96-well comparative analysis and durable history"
 authors = ["chenzhou96"]
 license = ""

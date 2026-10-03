@@ -1,4 +1,4 @@
-# ELISA Calculator 0.3
+# ELISA Calculator 0.3.1
 
 本地 96 孔板科研分析工作台：比较连续稀释组的剂量–响应曲线、EC50 和参比归一 X。Tauri 2 + React/TypeScript 界面，Python/SciPy 计算引擎；实验数据留在本机。
 
@@ -30,6 +30,8 @@
 ## 运行与验证
 
 源码开发需要 Python 3.10+、Node.js 24.15+、Rust 和平台 Tauri 系统依赖。Windows installer 内置冻结 Python/SciPy bridge，用户不需要安装 Python、Node 或 Rust。Windows 10/11 x64 是兼容目标；具体最低版本及实际验证界限见 [Windows 验证](docs/WINDOWS_VALIDATION.md)。
+
+启动窗口按当前显示器的实际工作区（扣除任务栏、原生边框并考虑 DPI）调整大小。150% 缩放的小屏使用紧凑孔板与可滚动右侧编辑器；正常 1366×768 / 1440×900 逻辑像素布局保留。所有 96 孔保持可见，导航按钮保留可访问名称和悬停提示。
 
 ```sh
 python -m pip install -r requirements.txt

@@ -2,6 +2,7 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::Value;
 use tauri::Manager;
 mod history_storage;
+mod window_sizing;
 use std::{
   env,
   ffi::OsString,
@@ -357,6 +358,38 @@ async fn read_last_session(app: tauri::AppHandle) -> Result<Option<String>, Stri
     .await.map_err(|error| error.to_string())?
 }
 
+#[cfg(desktop)]
+fn fit_initial_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+  let monitor = window.current_monitor().ok().flatten()
+    .or_else(|| window.primary_monitor().ok().flatten())
+    .ok_or_else(|| "无法读取当前显示器工作区".to_string())?;
+  let area = monitor.work_area();
+  let inner = window.inner_size().map_err(|error| error.to_string())?;
+  let outer = window.outer_size().map_err(|error| error.to_string())?;
+  let geometry = window_sizing::startup_geometry(
+    window_sizing::WorkArea {
+      x: area.position.x,
+      y: area.position.y,
+      width: area.size.width,
+      height: area.size.height,
+    },
+    monitor.scale_factor(),
+    window_sizing::FrameSize {
+      width: outer.width.saturating_sub(inner.width),
+      height: outer.height.saturating_sub(inner.height),
+    },
+  ).ok_or_else(|| "显示器工作区无法容纳应用窗口".to_string())?;
+  // Lower the minimum before resizing: a 600 logical-pixel minimum is 900 physical pixels at 150%.
+  // Physical sizes avoid a second DPI conversion when centering on an offset monitor.
+  window.set_min_size(Some(tauri::PhysicalSize::new(geometry.min_width, geometry.min_height)))
+    .map_err(|error| error.to_string())?;
+  window.set_size(tauri::PhysicalSize::new(geometry.width, geometry.height))
+    .map_err(|error| error.to_string())?;
+  window.set_position(tauri::PhysicalPosition::new(geometry.x, geometry.y))
+    .map_err(|error| error.to_string())?;
+  Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -368,6 +401,17 @@ pub fn run() {
             .level(log::LevelFilter::Info)
             .build(),
         )?;
+      }
+      #[cfg(desktop)]
+      if let Some(window) = app.get_webview_window("main") {
+        if let Err(error) = fit_initial_window(&window) {
+          log::warn!("[window startup] {error}; 使用最大化窗口回退");
+          if let Err(error) = window.maximize() {
+            log::warn!("[window startup] 无法最大化窗口: {error}");
+          }
+        }
+        // The configured window stays hidden until its native size/position has been fitted.
+        window.show()?;
       }
       Ok(())
     })

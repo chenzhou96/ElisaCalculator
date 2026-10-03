@@ -18,7 +18,7 @@ test('v2 snapshot retains full unrounded response, report, plots, inputs and ref
   const serialized = serializeRecord(state, '2026-10-03T09:00:00.000Z')
   const data = JSON.parse(serialized)
   assert.equal(data.schema, RECORD_SCHEMA)
-  assert.equal(data.app_version, '0.3.0')
+  assert.equal(data.app_version, '0.3.1')
   assert.deepEqual(data.result, state.result)
   const restored = parseRecord(serialized)
   assert.equal(restored.rawText, state.rawText)

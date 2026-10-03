@@ -52,3 +52,11 @@ jobs:
           "$CHROMIUM_PATH" --version
       - run: npx playwright install-deps chromium
       - run: npm run test:e2e
+      - name: Preserve real-browser pixels and geometry evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ElisaCalculator-browser-evidence-${{ github.sha }}
+          path: desktop-ui/artifacts/qa/
+          if-no-files-found: ignore
+          retention-days: 14

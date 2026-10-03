@@ -66,7 +66,7 @@ jobs:
       - name: Build x64 NSIS installer including the frozen engine and offline WebView2
         working-directory: desktop-ui
         run: npm run tauri:build -- --ci --bundles nsis -- --locked
-      - name: Test native storage and resource handling
+      - name: Test native storage, resource handling and DPI work-area geometry
         working-directory: desktop-ui/src-tauri
         run: cargo test --locked
       - name: Smoke-test the installed app and engine without Python on PATH
