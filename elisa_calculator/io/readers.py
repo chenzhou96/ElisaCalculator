@@ -2,6 +2,15 @@ from io import StringIO
 import re
 
 import pandas as pd
+from ..arithmetic import evaluate_number
+
+def _is_number(value):
+    try:
+        evaluate_number(value)
+        return True
+    except (ValueError, TypeError, OverflowError):
+        return False
+
 
 
 def _token_count(line, sep):
@@ -45,8 +54,10 @@ def build_default_columns(n_cols):
     return ['concentration'] + [f'col_{i}' for i in range(1, n_cols)]
 
 
-def read_table_from_raw_text(raw_text):
-    if not raw_text or not raw_text.strip():
+def read_table_from_raw_text(raw_text, header_mode='auto'):
+    if header_mode not in ('auto', 'present', 'absent'):
+        return None, {'error': 'header_mode must be auto, present, or absent'}
+    if not isinstance(raw_text, str) or not raw_text.strip():
         return None, {'error': '输入为空'}
 
     lines = [line for line in raw_text.splitlines() if line.strip()]
@@ -57,30 +68,38 @@ def read_table_from_raw_text(raw_text):
     sep = infer_separator(raw)
 
     try:
-        preview_df = pd.read_csv(StringIO(raw), sep=sep, engine='python', header=None)
+        preview_df = pd.read_csv(StringIO(raw), sep=sep, engine='python', header=None, dtype=str, keep_default_na=False)
     except Exception as e:
         return None, {'error': f'无法解析数据: {e}'}
 
     if preview_df is None or preview_df.empty or preview_df.shape[1] < 2:
         return None, {'error': '列数不足，至少需要 2 列'}
 
-    first_col = preview_df.iloc[:, 0].astype(str).str.strip()
-    first_col_numeric = pd.to_numeric(first_col, errors='coerce').notna().all()
-
-    if first_col_numeric:
+    # Inspect the first row rather than requiring every later x to be valid.
+    # Later bad/missing cells belong in the input audit, not in header inference.
+    first = preview_df.iloc[0]
+    numeric_first_x = _is_number(first.iloc[0])
+    numeric_responses = any(_is_number(value) for value in first.iloc[1:])
+    has_header = header_mode == 'present' or (header_mode == 'auto' and not numeric_first_x and not numeric_responses)
+    warnings = []
+    if header_mode == 'auto' and not numeric_first_x and numeric_responses:
+        warnings.append('First row mixes text x with numeric responses; preserved as data. Select header mode explicitly if it is a header.')
+    if not has_header:
         df = preview_df.copy()
         df.columns = build_default_columns(df.shape[1])
-        header_mode = 'auto_default'
-        header_note = '检测到首列全为数字，已按“无表头数据”处理，并自动使用默认列名。'
+        detected_mode = 'auto_default'
+        header_note = '按无表头数据处理；所有数据行保留。可显式选择表头模式。'
     else:
-        try:
-            df = pd.read_csv(StringIO(raw), sep=sep, engine='python', header=0)
-        except Exception as e:
-            return None, {'error': f'表头读取失败: {e}'}
-        if df is None or df.empty or df.shape[1] < 2:
-            return None, {'error': '读取失败或列数不足'}
-        header_mode = 'user_header'
-        header_note = '检测到表头，已按用户原始列名处理。'
+        names = [str(value).strip() if pd.notna(value) else '' for value in first]
+        if any(not name for name in names) or len(set(names)) != len(names):
+            return None, {'error': '表头不能为空或重复；请为每列提供唯一名称'}
+        df = preview_df.iloc[1:].copy().reset_index(drop=True)
+        df.columns = names
+        if df.empty:
+            return None, {'error': '表头后没有数据'}
+        detected_mode = 'user_header'
+        header_note = '已按用户原始列名处理。'
+    header_mode = detected_mode
 
     df.attrs['header_mode'] = header_mode
     df.attrs['header_note'] = header_note
@@ -90,6 +109,7 @@ def read_table_from_raw_text(raw_text):
         'header_note': header_note,
         'separator': sep,
         'columns': list(df.columns),
+        'warnings': warnings,
     }
 
 

@@ -1,0 +1,125 @@
+name: Build and smoke-test standalone Windows installer
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    # This is Windows Server 2022, not native Windows 10/11 acceptance testing.
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop-ui/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-build.txt
+            desktop-ui/scripts/requirements-windows-build.txt
+      - name: Select the bridge interpreter and validate packaging scripts
+        run: |
+          # runner context is unavailable in jobs.<job_id>.env; use the runtime variable.
+          $plotCache = Join-Path $env:RUNNER_TEMP 'elisa-matplotlib'
+          "MPLCONFIGDIR=$plotCache" >> $env:GITHUB_ENV
+          $pythonHome = Split-Path -Parent (Get-Command python).Source
+          "BRIDGE_PYTHON_HOME=$pythonHome" >> $env:GITHUB_ENV
+          Get-ChildItem desktop-ui/scripts/*.ps1 | ForEach-Object {
+            $tokens = $null; $errors = $null
+            [void][Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors)
+            if ($errors.Count) { throw ($errors | Out-String) }
+          }
+      - name: Install the Windows numerical stack and run backend tests
+        run: |
+          python -m pip install --only-binary=:all: -r desktop-ui/scripts/requirements-windows-build.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Packaging dependency installation failed.' }
+          python -m pip check
+          if ($LASTEXITCODE -ne 0) { throw 'Packaging dependency compatibility check failed.' }
+          python -m unittest discover -s tests -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows backend tests failed.' }
+      - name: Install frontend dependencies
+        working-directory: desktop-ui
+        run: npm ci
+      - name: Install the official Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          if ($LASTEXITCODE -ne 0) { throw 'Rust toolchain installation failed.' }
+          rustup default stable
+          if ($LASTEXITCODE -ne 0) { throw 'Rust toolchain selection failed.' }
+      - name: Build x64 NSIS installer including the frozen engine and offline WebView2
+        working-directory: desktop-ui
+        run: npm run tauri:build -- --ci --bundles nsis -- --locked
+      - name: Test native storage and resource handling
+        working-directory: desktop-ui/src-tauri
+        run: cargo test --locked
+      - name: Smoke-test the installed app and engine without Python on PATH
+        run: |
+          $installers = @(Get-ChildItem desktop-ui/src-tauri/target/release/bundle/nsis/*-setup.exe)
+          if ($installers.Count -ne 1) { throw 'Expected exactly one NSIS setup executable.' }
+          & desktop-ui/scripts/windows-installer-smoke.ps1 -Installer $installers[0].FullName `
+            -ReportDirectory desktop-ui/artifacts/windows
+      - name: Run subprocess unittests against the installed frozen engine
+        run: |
+          $smoke = Get-Content desktop-ui/artifacts/windows/windows-installer-smoke.json | ConvertFrom-Json
+          $env:ELISA_BRIDGE_TEST_EXECUTABLE = Join-Path $smoke.install_directory 'resources/bridge/elisa_bridge.exe'
+          python -m unittest discover -s desktop-ui/scripts -p test_windows_packaging.py -v 2>&1 | `
+            Tee-Object desktop-ui/artifacts/windows/frozen-bridge-unittest.log
+          if ($LASTEXITCODE -ne 0) { throw 'Installed frozen-bridge unittests failed.' }
+      - name: Record exact commit, dependencies and SHA-256 checksums
+        run: |
+          $out = Join-Path $PWD 'desktop-ui/artifacts/windows'
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+          $sha = (git rev-parse HEAD).Trim()
+          if ($sha -ne $env:GITHUB_SHA) { throw 'Checkout does not match the workflow commit.' }
+          Copy-Item desktop-ui/src-tauri/target/release/bundle/nsis/*-setup.exe $out
+          python -m pip freeze --all | Set-Content (Join-Path $out 'python-build-environment.txt') -Encoding utf8
+          npm ls --prefix desktop-ui --depth=0 --json | Set-Content (Join-Path $out 'npm-build-environment.json') -Encoding utf8
+          $os = Get-CimInstance Win32_OperatingSystem
+          $metadata = [ordered]@{
+            commit = $sha; ref = $env:GITHUB_REF; version = (Get-Content desktop-ui/package.json | ConvertFrom-Json).version
+            workflow_run = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+            runner_os = $os.Caption; runner_version = $os.Version; runner_image = $env:ImageVersion
+            architecture = 'x64'; python = (python --version); rust = (rustc --version); node = (node --version)
+            webview_distribution = 'offlineInstaller'; code_signed = $false
+            native_windows_10_validated = $false; native_windows_11_validated = $false
+          }
+          $metadata | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $out 'BUILD_METADATA.json') -Encoding utf8
+          $hashes = Get-ChildItem $out -File | Sort-Object Name | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $($_.Name)"
+          }
+          $hashes | Set-Content (Join-Path $out 'SHA256SUMS.txt') -Encoding ascii
+          "### Windows installer: $sha" >> $env:GITHUB_STEP_SUMMARY
+          'NSIS installation, frozen-engine known-truth parse/fit/inverse/preview/export checks, and native-window launch passed on Windows Server 2022. Native Windows 10/11 acceptance tests are separate.' >> $env:GITHUB_STEP_SUMMARY
+      - name: Upload commit-specific installer and verification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ElisaCalculator-windows-x64-${{ github.sha }}
+          path: desktop-ui/artifacts/windows/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+      - name: Preserve smoke reports when validation fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ElisaCalculator-windows-diagnostics-${{ github.sha }}
+          path: desktop-ui/artifacts/windows/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,27 @@
+{
+  "command": "run",
+  "raw_text": "concentration_ng_ml,Standard\n0.5,0.09891465169175268\n1,0.1447784471977907\n2,0.29332142744459927\n4,0.7046929169719343\n8,1.48\n16,2.2553070830280655\n32,2.666678572555401\n64,2.815221552802209\n128,2.8610853483082472\n",
+  "analysis_options": {
+    "workflow": "standard_curve",
+    "input_mode": "raw_concentration",
+    "concentration_unit": "ng/mL",
+    "fit_mode": "independent",
+    "standard_group": "Standard",
+    "unknown_samples": [
+      {
+        "sample_id": "Known_truth_12",
+        "od": [
+          1.9693547261121727,
+          1.9693547261121727
+        ],
+        "dilution_factor": 5
+      },
+      {
+        "sample_id": "Below_range",
+        "od": 0.08105058953949439,
+        "dilution_factor": 1
+      }
+    ]
+  },
+  "save_outputs": false
+}

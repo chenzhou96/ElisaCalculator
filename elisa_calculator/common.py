@@ -2,6 +2,7 @@ import os
 import re
 import sys
 from datetime import datetime
+from uuid import uuid4
 
 
 def resource_path(relative_path):
@@ -20,7 +21,7 @@ def sanitize_filename(name):
 
 
 def make_output_dir(source_label='Paste'):
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '_' + uuid4().hex[:8]
     if sys.platform.startswith('win'):
         cache_root = os.environ.get('LOCALAPPDATA') or os.environ.get('APPDATA')
         if not cache_root:

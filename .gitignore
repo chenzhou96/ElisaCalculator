@@ -26,3 +26,10 @@ desktop-ui/*.ntvs*
 desktop-ui/*.njsproj
 desktop-ui/*.sln
 desktop-ui/*.sw?
+
+# Local validation and generated artifacts
+node_modules/
+.qa/
+playwright-report/
+test-results/
+desktop-ui/artifacts/

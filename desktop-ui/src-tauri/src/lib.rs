@@ -1,5 +1,7 @@
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::Value;
+use tauri::Manager;
+mod history_storage;
 use std::{
   env,
   ffi::OsString,
@@ -84,7 +86,7 @@ fn parse_bridge_output(output: std::process::Output, command_name: &str) -> Resu
 
   serde_json::from_str::<Value>(&stdout)
     .map_err(|err| {
-      log::error!("[Rust bridge] JSON 解析失败: {}\nstdout 前 500 字符: {}", err, &stdout[..stdout.len().min(500)]);
+      log::error!("[Rust bridge] JSON 解析失败: {}\nstdout 前 500 字符: {}", err, stdout.chars().take(500).collect::<String>());
       format!("{command_name} 返回了无效 JSON: {err}\n{stdout}")
     })
 }
@@ -274,7 +276,27 @@ fn run_python_bridge(request: Value) -> Result<Value, String> {
 
 #[tauri::command]
 fn read_file_base64(path: String) -> Result<String, String> {
-  let mut file = std::fs::File::open(&path)
+  // Legacy PNG loader is confined to this application's own export cache.
+  let base = if cfg!(windows) {
+    env::var_os("LOCALAPPDATA").or_else(|| env::var_os("APPDATA")).map(PathBuf::from)
+  } else if cfg!(target_os = "macos") {
+    env::var_os("HOME").map(|p| PathBuf::from(p).join("Library/Caches"))
+  } else {
+    env::var_os("XDG_CACHE_HOME").map(PathBuf::from)
+      .or_else(|| env::var_os("HOME").map(|p| PathBuf::from(p).join(".cache")))
+  }.ok_or("无法确定应用缓存目录")?;
+  let root = base.join("Elisa_calculator").canonicalize()
+    .map_err(|_| "应用导出目录不存在")?;
+  let resolved = Path::new(&path).canonicalize()
+    .map_err(|_| "图片不存在")?;
+  if !resolved.starts_with(root)
+    || resolved.extension().and_then(|s| s.to_str()).map(|s| s.to_lowercase()) != Some("png".to_string()) {
+    return Err("仅允许读取应用导出的 PNG 图片".into());
+  }
+  if std::fs::metadata(&resolved).map_err(|e| e.to_string())?.len() > 32 * 1024 * 1024 {
+    return Err("图片超过 32 MiB 限制".into());
+  }
+  let mut file = std::fs::File::open(&resolved)
     .map_err(|err| format!("无法打开文件 {path}: {err}"))?;
   let mut buf = Vec::new();
   file.read_to_end(&mut buf)
@@ -300,10 +322,45 @@ async fn run_bridge(request: Value) -> Result<Value, String> {
   result
 }
 
+fn history_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+  app.path().app_data_dir().map(|root| root.join("analysis-history"))
+    .map_err(|error| format!("无法确定应用数据目录: {error}"))
+}
+#[tauri::command]
+async fn save_history_snapshot(app: tauri::AppHandle, id: String, text: String) -> Result<(), String> {
+  let root = history_root(&app)?;
+  tauri::async_runtime::spawn_blocking(move || history_storage::save_snapshot(&root, &id, &text))
+    .await.map_err(|error| error.to_string())?
+}
+#[tauri::command]
+async fn list_history_snapshots(app: tauri::AppHandle) -> Result<Vec<history_storage::HistoryEntry>, String> {
+  let root = history_root(&app)?;
+  tauri::async_runtime::spawn_blocking(move || history_storage::list_snapshots(&root))
+    .await.map_err(|error| error.to_string())?
+}
+#[tauri::command]
+async fn read_history_snapshot(app: tauri::AppHandle, id: String) -> Result<String, String> {
+  let root = history_root(&app)?;
+  tauri::async_runtime::spawn_blocking(move || history_storage::read_snapshot(&root, &id))
+    .await.map_err(|error| error.to_string())?
+}
+#[tauri::command]
+async fn save_last_session(app: tauri::AppHandle, text: String) -> Result<(), String> {
+  let root = history_root(&app)?;
+  tauri::async_runtime::spawn_blocking(move || history_storage::save_session(&root, &text))
+    .await.map_err(|error| error.to_string())?
+}
+#[tauri::command]
+async fn read_last_session(app: tauri::AppHandle) -> Result<Option<String>, String> {
+  let root = history_root(&app)?;
+  tauri::async_runtime::spawn_blocking(move || history_storage::read_session(&root))
+    .await.map_err(|error| error.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
-    .invoke_handler(tauri::generate_handler![run_bridge, read_file_base64])
+    .invoke_handler(tauri::generate_handler![run_bridge, read_file_base64, save_history_snapshot, list_history_snapshots, read_history_snapshot, save_last_session, read_last_session])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

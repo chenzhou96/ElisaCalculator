@@ -1,2 +1,10 @@
-@import './styles/variables.css';
-@import './styles/base.css';
+/* Global styles are defined in App.css. */
+
+.reference-controls {display:flex; align-items:center; gap:15px; padding:10px 14px; border:1px solid var(--border,#dce2de); border-radius:8px; flex:none}
+.reference-controls .field {margin:0; max-width:220px; flex:1}
+.reference-controls p {font-size:10px; color:var(--text-soft,#8b928e); flex:1}
+.history-modal {width:min(580px,90vw)}
+.history-list {max-height:55vh; overflow:auto; display:flex; flex-direction:column; gap:7px; margin:12px 0}
+.history-list button {justify-content:space-between}
+.legacy-input {padding:20px; gap:12px; overflow:auto}
+.legacy-input pre {white-space:pre-wrap; overflow-wrap:anywhere}

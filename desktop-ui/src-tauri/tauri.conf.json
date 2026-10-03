@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "ElisaCalculator",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "identifier": "com.zhouc.elisacalculator",
   "build": {
     "frontendDist": "../dist",
@@ -23,16 +23,16 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost"
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "useLocalToolsDir": true,
     "resources": [
-      "../../elisa_calculator",
-      "../../ElisaCalculator.py",
       "resources/bridge/elisa_bridge.exe"
     ],
     "icon": [
@@ -43,6 +43,10 @@
       "icons/icon.ico"
     ],
     "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller",
+        "silent": true
+      },
       "nsis": {
         "installMode": "currentUser",
         "installerIcon": "icons/icon.ico",
