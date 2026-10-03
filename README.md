@@ -51,7 +51,7 @@ npm run build
 npm run lint
 ```
 
-前端交互、端到端脚本见 `desktop-ui/tests/` 及 package.json 的测试命令。无可写用户目录的 CI 环境应把 `XDG_CACHE_HOME`、`MPLCONFIGDIR` 设置到可写临时目录。
+前端交互、端到端脚本见 `desktop-ui/tests/` 及 package.json 的测试命令。浏览器测试始终开启 Chromium sandbox。Ubuntu 24.04 的 GitHub Actions 使用 runner 已安装的稳定版 Chrome（`CHROMIUM_PATH=/opt/google/chrome/chrome`），避开自动选中 `/usr/bin/chromium` 后无法创建 sandbox 的情况；不修改 AppArmor、user namespace 或 sandbox 设置。该标准安装路径由 [Ubuntu 现有 AppArmor 配置](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md) 支持，runner 的 [预装软件清单](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md) 列有 Chrome。自定义 runner 需先提供可正常开启 sandbox 的浏览器；缺失时测试会明确失败，不会回退到禁用 sandbox。无可写用户目录的 CI 环境应把 `XDG_CACHE_HOME`、`MPLCONFIGDIR` 设置到可写临时目录。
 
 测试覆盖应包括真值曲线、稀释方向、参比赋值、反算往返、非法/非有限输入、范围与不确定性、旧结果失效、失败导出及常见桌面窗口布局。测试通过仅证明所覆盖的软件行为，不等于实验方法已验证。
 
