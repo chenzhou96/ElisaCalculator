@@ -27,3 +27,11 @@ test('explicit CI browser selection preserves the Chromium sandbox', () => {
   assert.equal(config.chromiumSandbox, true)
   assert.equal((config.args || []).some(arg => /no-sandbox|disable.*sandbox/.test(arg)), false)
 })
+
+test('Windows job initializes runner-specific paths at runtime rather than unavailable job env context', async () => {
+  const source = readFileSync(new URL('../../.github/workflows/windows-installer.yml', import.meta.url), 'utf8')
+  const jobEnv = source.split('    env:\n')[1]?.split('    steps:')[0] ?? ''
+  assert.doesNotMatch(jobEnv,/\$\{\{\s*runner\./)
+  assert.match(source,/Join-Path \$env:RUNNER_TEMP 'elisa-matplotlib'/)
+  assert.match(source,/"MPLCONFIGDIR=\$plotCache" >> \$env:GITHUB_ENV/)
+})
