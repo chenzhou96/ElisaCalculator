@@ -313,7 +313,7 @@ mod tests {
   fn storage_failure_is_an_error_not_a_cache_fallback() {
     let directory = root(); fs::write(&directory, "blocking file").unwrap();
     assert!(save_session(&directory, &snapshot("never persisted")).is_err());
-    fs::remove_file(directory).unwrap();
+    fs::remove_file(&directory).unwrap();
     save_session(&directory, &snapshot("retry")).unwrap();
     assert!(read_session(&directory).unwrap().is_some());
     fs::remove_dir_all(directory).unwrap();

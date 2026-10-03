@@ -24,9 +24,9 @@ afterEach(()=>cleanup())
 after(async()=>{await server?.close()})
 const assignment={kind:'comparison',group:'Reference',start:128,factor:2,direction:'decreasing',axis:'column',spacing:'physical',dilution:1}
 const well=(id)=>current.plate.wells.find(w=>w.id===id)
-function setup(plate) {
+function setup(plate,options={}) {
   actions=[]
-  const initial={...structuredClone(model.initialWorkspace),plate,options:{...model.defaultOptions,reference_group:'Reference'},result:{ok:true},version:21}
+  const initial={...structuredClone(model.initialWorkspace),plate,options:{...model.defaultOptions,reference_group:'Reference',...options},result:{ok:true},version:21}
   function Harness() {
     const [state,setState]=React.useState(initial)
     current=state
@@ -134,4 +134,23 @@ test('focused numeric drafts reset on cancellation and cannot resurrect after se
   fireEvent.focus(screen.getByLabelText('起始量 / 浓度'));change('起始量 / 浓度','64')
   choose('E3');assert.equal(screen.getByLabelText('起始量 / 浓度').value,'1')
   choose('B1');assert.equal(screen.getByLabelText('起始量 / 浓度').value,'128');assert.equal(current.version,21)
+})
+
+
+test('legacy plate explicitly switches workflow without converting or erasing wells or unknown metadata',()=>{
+  const plate=plateModule.plateExample('standard_curve')
+  const unknown_samples=[{sample_id:'Archived unknown',od:[0.5],dilution_factor:5}]
+  setup(plate,{workflow:'standard_curve',standard_group:'Standard',unknown_samples})
+  const original=JSON.stringify(current.plate.wells)
+  fireEvent.click(screen.getByRole('tab',{name:'分析约定',exact:true}))
+  click('将此板图改为比较分析')
+  assert.equal(current.options.workflow,'comparative')
+  assert.equal(JSON.stringify(current.plate.wells),original)
+  assert.deepEqual(current.options.unknown_samples,unknown_samples)
+  assert.equal(current.options.standard_group,'Standard')
+  assert.equal(current.result,null)
+  assert.ok(plateModule.compilePlate(current.plate,current.options).errors.some(error=>/旧版/.test(error)))
+  click('撤销孔板操作')
+  assert.equal(current.options.workflow,'standard_curve')
+  assert.equal(JSON.stringify(current.plate.wells),original)
 })

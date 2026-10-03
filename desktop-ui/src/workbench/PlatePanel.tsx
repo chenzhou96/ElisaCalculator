@@ -22,6 +22,7 @@ export function PlateAnalysisControls({state, dispatch}: {state: Workspace; disp
   const p = state.plate, groups = curveGroups(p).filter(g => p.wells.some(w => w.group === g && w.kind === "comparison"));
   const update = (patch: Partial<PlateDocument>) => dispatch({type: "plate", plate: {...p, ...patch}});
   return <div className="plate-analysis-controls">
+    {state.options.workflow === "standard_curve" && <div className="notice warning"><p>这是旧版标准反算板图。转换只改变分析工作流并使历史拟合失效，保留全部原始孔位和旧未知样品信息；标准 / 未知孔仍须明确重新标记，不会自动变成比较组。</p><button onClick={() => dispatch({type: "options", patch: {workflow: "comparative"}})}>将此板图改为比较分析</button></div>}
     <div className="field-grid">
       <Field label="孔板剂量单位"><select value={p.basis} onChange={e => update({basis: e.target.value as PlateDocument["basis"]})}><option value="relative">无量纲剂量</option><option value="absolute">已知绝对浓度</option></select></Field>
       <Field label="板图浓度单位"><input value={p.basis === "relative" ? "无量纲" : p.unit} disabled={p.basis === "relative"} onChange={e => update({unit: e.target.value})} placeholder="ng/mL、nM" /></Field>
