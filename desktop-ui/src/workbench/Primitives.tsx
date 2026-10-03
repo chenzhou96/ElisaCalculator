@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { cloneElement, isValidElement, type ReactElement, type ReactNode } from "react";
 
 export function Icon({ name, size = 16 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
@@ -86,7 +86,9 @@ export function Field({
   return (
     <label className="field" data-field={label}>
       <span>{label}</span>
-      {children}
+      {isValidElement(children)
+        ? cloneElement(children as ReactElement<{"aria-label"?: string}>, {"aria-label": (children.props as {"aria-label"?: string})["aria-label"] ?? label})
+        : children}
       {hint && <small>{hint}</small>}
     </label>
   );

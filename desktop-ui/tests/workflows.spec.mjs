@@ -157,7 +157,7 @@ test('v2 portable snapshot restores actual fits and plots without scientific cal
   const count=page.__commands.length;await restore(page,file);await nav(page,'原始数据')
   await expect(well(page,'A1')).toHaveAttribute('aria-label',/2\.781493605490578/)
   await nav(page,'结果汇总');await expect(page.getByRole('cell',{name:'40 X',exact:true})).toBeVisible()
-  await expect(page.getByText(/历史结果快照/)).toBeVisible()
+  await expect(page.locator('.results-layout .notice.warning').filter({hasText:'历史结果快照'})).toBeVisible()
   await nav(page,'曲线预览');await expect(page.getByRole('img',{name:/4PL 拟合曲线/})).toHaveAttribute('src',body.previews[0].data_url)
   expect(page.__commands).toHaveLength(count)
   await page.getByRole('button',{name:'文件',exact:true}).click();await page.keyboard.press('Escape');await expect(page.getByRole('menu')).toHaveCount(0)

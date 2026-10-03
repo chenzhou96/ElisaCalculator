@@ -136,6 +136,7 @@ function fitOnly(response) {return {details:response.report.detailed_rows.map(({
   assert.equal(screen.queryByRole('button',{name:/标准曲线.*未知样品/}),null)
   assert.deepEqual([...screen.getByLabelText('孔类型').options].map(option=>option.value),['comparison','blank','excluded','unassigned'])
   tab('分析约定')
+  for(const label of ['板图参比组','板图4PL拟合模式','空白校正作用域']) assert.equal(screen.getByLabelText(label,{exact:true}).getAttribute('aria-label'),label,'Field select must have an explicit accessible name matching its visual caption')
   assert.equal(screen.queryByLabelText('标准曲线'),null)
   assert.equal(screen.queryByLabelText('样品 OD 1'),null)
  })
