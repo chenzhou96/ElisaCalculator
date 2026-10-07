@@ -10,7 +10,8 @@ function ConvertFrom-NativeStartupLog {
   if ($records.Count -gt 1) { throw 'Native startup reported more than one Ready-time sizing result.' }
   if (!$records.Count) { return $null }
   $result = $records[0].Substring($prefix.Length) | ConvertFrom-Json -NoEnumerate -ErrorAction Stop
-  if ($result -isnot [pscustomobject] -or $result.fit_ok -isnot [bool]) {
+  # The [pscustomobject] accelerator means PSObject and can also match wrapped arrays.
+  if ($result -isnot [System.Management.Automation.PSCustomObject] -or $result.fit_ok -isnot [bool]) {
     throw 'Native startup sizing result must contain a Boolean fit_ok.'
   }
   return $result

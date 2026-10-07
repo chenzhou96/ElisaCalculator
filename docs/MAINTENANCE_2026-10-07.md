@@ -52,6 +52,10 @@ tests, plus the production build, lint and whitespace checks. Local Chromium
 could not create its process-singleton socket in the execution environment;
 browser tests were not counted as local passes, and its sandbox was retained.
 Hosted browser and Windows results must be checked for the final pushed commit.
+The first pushed Windows run caught PowerShell's `[pscustomobject]` accelerator
+accepting a wrapped array. The guard now checks the concrete custom-object type;
+the array regression and all script parser checks passed locally in official
+PowerShell 7.5.3 before publishing the correction.
 
 Run the documented Python suite with writable Matplotlib/cache directories,
 locked frontend install, build, lint, unit tests, DOM integration and plate

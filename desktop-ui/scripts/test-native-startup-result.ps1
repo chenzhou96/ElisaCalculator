@@ -4,7 +4,7 @@ function Assert-Throws {
   param([scriptblock]$Action)
   $threw = $false
   try { & $Action | Out-Null } catch { $threw = $true }
-  if (!$threw) { throw 'Expected invalid startup evidence to be rejected.' }
+  if (!$threw) { throw "Expected invalid startup evidence to be rejected: $Action" }
 }
 foreach ($text in @('', "[window startup] querying monitor`n", '[window startup result] {"fit_ok":true}',
     "[window startup] ready`n[window startup result] {`"fit_ok`":")) {
