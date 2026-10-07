@@ -6,6 +6,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'native-startup-result.ps1')
 $Installer = (Resolve-Path -LiteralPath $Installer).Path
 $ReportDirectory = [IO.Path]::GetFullPath($ReportDirectory)
 New-Item -ItemType Directory -Path $ReportDirectory -Force | Out-Null
@@ -173,26 +174,43 @@ try {
       throw "Native app exited before creating a window: $($nativeState | ConvertTo-Json -Compress)"
     }
   } while ($app.MainWindowHandle -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline)
-  $stabilityDeadline = [DateTime]::UtcNow.AddSeconds(5)
   $nativeState = Save-NativeLaunchSnapshot -Process $app -Stage 'window-discovery'
   if ($nativeState.has_exited -ne $false -or !$nativeState.main_window_handle) {
     throw "Native app did not create a top-level window: $($nativeState | ConvertTo-Json -Compress)"
   }
-  # Diagnostic reads must not add another grace period to the original five-second check.
+  # Await actual Ready completion within the original launch deadline, rather than
+  # assuming a responding HWND means the Ready callback has finished.
+  $fitState = $null
+  do {
+    $app.Refresh()
+    if ($app.HasExited) {
+      $nativeState = Save-NativeLaunchSnapshot -Process $app -Stage 'exited-before-sizing-result'
+      throw "Native app exited before completing Ready-time sizing: $($nativeState | ConvertTo-Json -Compress)"
+    }
+    $fitState = ConvertFrom-NativeStartupLog -Text (Get-Content -LiteralPath $nativeStderrPath -Raw -ErrorAction Stop)
+    if ($null -eq $fitState) { Start-Sleep -Milliseconds 100 }
+  } while ($null -eq $fitState -and [DateTime]::UtcNow -lt $deadline)
+  if ($null -eq $fitState) {
+    $nativeState = Save-NativeLaunchSnapshot -Process $app -Stage 'sizing-result-timeout'
+    throw "Native Ready-time sizing did not complete within $LaunchTimeoutSeconds seconds; see $nativeStderrPath."
+  }
+  $nativeState = Save-NativeLaunchSnapshot -Process $app -Stage 'sizing-result-captured'
+  $stabilityDeadline = [DateTime]::UtcNow.AddSeconds(5)
+  # Keep the full five-second responsiveness check after confirmed Ready completion.
   $remainingMilliseconds = ($stabilityDeadline - [DateTime]::UtcNow).TotalMilliseconds
   if ($remainingMilliseconds -gt 0) { Start-Sleep -Milliseconds ([int][Math]::Ceiling($remainingMilliseconds)) }
   $nativeState = Save-NativeLaunchSnapshot -Process $app -Stage 'after-five-seconds'
   if ($nativeState.has_exited -ne $false -or $nativeState.responding -ne $true -or $nativeState.main_window_title -ne 'ELISA Calculator') {
     throw "Installed native window did not remain responsive with the expected title: $($nativeState | ConvertTo-Json -Compress)"
   }
-  $fitPrefix = '[window startup result] '
-  $fitLines = @(Get-Content -LiteralPath $nativeStderrPath | Where-Object { $_.StartsWith($fitPrefix) })
-  if ($fitLines.Count -ne 1) { throw 'Installed app did not report exactly one completed Ready-time native sizing result.' }
-  $fitState = $fitLines[0].Substring($fitPrefix.Length) | ConvertFrom-Json
+  # Revalidate after the stability window so duplicate/failed evidence cannot be hidden.
+  $fitState = ConvertFrom-NativeStartupLog -Text (Get-Content -LiteralPath $nativeStderrPath -Raw -ErrorAction Stop)
+  if ($null -eq $fitState) { throw 'Captured native sizing completion disappeared.' }
   $bounds = Read-NativeWorkAreaBounds -WindowHandle ([IntPtr]$nativeState.main_window_handle)
   $boundsReport = [ordered]@{
     coordinate_space = 'physical pixels; temporary measuring-thread DPI context restored'
     visible = $bounds.Visible; dpi = $bounds.Dpi; scale_factor = $bounds.Dpi / 96.0; fit_ok = $fitState.fit_ok
+    startup_result = $fitState
     outer = Convert-NativeRect $bounds.Outer; client = Convert-NativeRect $bounds.Client
     client_screen = Convert-NativeRect $bounds.ClientScreen; work_area = Convert-NativeRect $bounds.WorkArea
   }

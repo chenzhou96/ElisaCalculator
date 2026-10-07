@@ -194,6 +194,9 @@ export function reducer(state: Workspace, action: Action): Workspace {
       };
     case "options": {
       const referenceOnly = Object.keys(action.patch).length > 0 && Object.keys(action.patch).every(key => key === "reference_group" || key === "reference_assigned_value");
+      // Numeric formulas publish their evaluated value on change and again on
+      // blur. The second, identical value must not supersede an in-flight update.
+      if (referenceOnly && Object.entries(action.patch).every(([key, value]) => Object.is(state.options[key as keyof AnalysisOptions], value))) return state;
       if (referenceOnly && state.result?.ok && state.result.report?.options?.workflow === "comparative") {
         return {...state, options: {...state.options, ...action.patch}, version: state.version + 1, error: "", status: "参比归一更新中 · 保留已有拟合"};
       }

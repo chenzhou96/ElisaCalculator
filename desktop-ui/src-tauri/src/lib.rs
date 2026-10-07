@@ -426,7 +426,10 @@ pub fn run() {
         // Ready is delivered after configured windows and the setup hook have completed.
         // Stay on the runtime's main thread so sizing uses direct native dispatch, not a
         // detached setup worker's event-loop proxy. Creation already uses preventOverflow.
-        eprintln!("[window startup] Ready: fitting main window on the event-loop thread");
+        let started = std::time::Instant::now();
+        let started_at_unix_ms = std::time::SystemTime::now()
+          .duration_since(std::time::UNIX_EPOCH).ok().map(|duration| duration.as_millis());
+        eprintln!("[window startup] Ready at {started_at_unix_ms:?}: fitting main window on the event-loop thread");
         if let Some(window) = app.get_webview_window("main") {
           let fit = fit_initial_window(&window);
           if let Err(error) = &fit {
@@ -439,7 +442,10 @@ pub fn run() {
             "[window startup] visible={:?}, title={:?}, inner_size={:?}",
             window.is_visible(), window.title(), window.inner_size(),
           );
-          eprintln!("[window startup result] {}", serde_json::json!({ "fit_ok": fit.is_ok() }));
+          eprintln!("[window startup result] {}", serde_json::json!({
+            "fit_ok": fit.is_ok(), "fit_error": fit.err(),
+            "started_at_unix_ms": started_at_unix_ms, "elapsed_ms": started.elapsed().as_millis(),
+          }));
         } else {
           eprintln!("[window startup] Ready: main window is missing");
         }

@@ -46,6 +46,7 @@ jobs:
             [void][Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors)
             if ($errors.Count) { throw ($errors | Out-String) }
           }
+          & desktop-ui/scripts/test-native-startup-result.ps1
       - name: Install the Windows numerical stack and run backend tests
         run: |
           python -m pip install --only-binary=:all: -r desktop-ui/scripts/requirements-windows-build.txt

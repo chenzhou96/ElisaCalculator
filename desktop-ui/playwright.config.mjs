@@ -15,7 +15,7 @@ export default defineConfig({
     viewport: { width: 1366, height: 768 },
     browserName: 'chromium',
     launchOptions: { executablePath: process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined), chromiumSandbox: true },
-    trace: 'retain-on-failure',
+    trace: { mode: 'retain-on-failure', sources: true, screenshots: true, snapshots: true },
     screenshot: 'only-on-failure',
   },
   webServer: {

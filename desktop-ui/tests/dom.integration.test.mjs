@@ -45,7 +45,7 @@ before(async () => {
     bridgeInFlight++
     try {
       const response = await bridge(request)
-      if (transportGate && request.command === transportGate.command) await transportGate.hold(response)
+      if (transportGate && request.command === transportGate.command) await transportGate.hold(response,request)
       return new Response(JSON.stringify(response), {status:200, headers:{'Content-Type':'application/json'}})
     } finally {bridgeInFlight--}
   }
@@ -176,6 +176,37 @@ function fitOnly(response) {return {details:response.report.detailed_rows.map(({
   assert.equal(scientificCalls.length,countAfter,'Theme, well selection, and result selection must not recompute or invalidate results')
   navigate('曲线预览')
   assert.equal(screen.getByRole('img',{name:/4PL 拟合曲线/}).getAttribute('src'),body.previews[0].data_url)
+ })
+
+ for(const oldValue of [12,0]) test(`latest reference survives a reversed real ${oldValue?'success':'failure'} response and a duplicate formula commit`,async()=>{
+  await mount();click('载入板示例');const original=await run()
+  change('结果参比组','Sample_4X')
+  await waitFor(()=>assert.ok(screen.queryByRole('cell',{name:'2.5 X',exact:true})),{timeout:60_000})
+  await waitFor(()=>assert.equal(bridgeInFlight,0),{timeout:60_000})
+  const count=scientificCalls.length
+  let release,observed
+  const held=new Promise(resolve=>{release=resolve}),seen=new Promise(resolve=>{observed=resolve})
+  transportGate={command:'renormalize',hold:async(response,request)=>{if(request.reference_assigned_value===oldValue){observed(response);await held}}}
+  try {
+    change('结果参比赋值（X）',String(oldValue))
+    const old=await seen
+    assert.equal(old.ok,oldValue!==0,old.error)
+    formula('结果参比赋值（X）','=14/2','7')
+    await waitFor(()=>assert.ok(screen.queryByRole('cell',{name:'1.75 X',exact:true})),{timeout:60_000})
+    release();await waitFor(()=>assert.equal(bridgeInFlight,0),{timeout:60_000})
+    assert.ok(screen.getByRole('cell',{name:'1.75 X',exact:true}))
+    assert.ok(screen.getByRole('cell',{name:'7 X',exact:true}))
+    assert.equal(screen.getByLabelText('结果参比赋值（X）',{exact:true}).value,'7')
+    assert.match(status(),/参比归一已更新/)
+    const calls=scientificCalls.slice(count)
+    assert.deepEqual(calls.map(call=>call.request.command),['renormalize','renormalize'])
+    assert.deepEqual(calls.map(call=>call.request.reference_assigned_value),[oldValue,7])
+    const saved=await savedRecord()
+    assert.equal(saved.inputs.options.reference_group,'Sample_4X')
+    assert.equal(saved.inputs.options.reference_assigned_value,7)
+    assert.deepEqual(saved.result,calls.at(-1).response)
+    assert.deepEqual(fitOnly(saved.result),fitOnly(original))
+  } finally {release();transportGate=null}
  })
 
  test('plate draft edits, arithmetic and cancel do not write; confirmed OD and model edits invalidate result and previews',async()=>{

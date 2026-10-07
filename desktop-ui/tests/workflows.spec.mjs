@@ -6,6 +6,33 @@ const well = (page,id) => page.locator(`[data-well="${id}"]`)
 function bridgeResponse(page,command) {
   return page.waitForResponse(response => response.url().endsWith('/api/bridge') && response.request().postDataJSON()?.command === command)
 }
+function referenceRequest(page,group,value) {
+  return page.waitForRequest(request=>request.url().endsWith('/api/bridge')&&request.postDataJSON()?.command==='renormalize'&&request.postDataJSON()?.reference_group===group&&request.postDataJSON()?.reference_assigned_value===value)
+}
+async function requestBody(request) {
+  const response=await request.response()
+  expect(response,'the exact requested bridge call must return a response').not.toBeNull()
+  expect(response.ok()).toBe(true)
+  const body=await response.json()
+  expect(body.ok,body.error).toBe(true)
+  return body
+}
+const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done});return {promise,resolve}}
+async function holdReferenceResponse(page,group,value) {
+  const seen=deferred(),released=deferred(),delivered=deferred()
+  const handler=async route=>{
+    const request=route.request().postDataJSON()
+    if(request.command!=='renormalize'||request.reference_group!==group||request.reference_assigned_value!==value) return route.continue()
+    const response=await route.fetch()
+    seen.resolve(await response.json())
+    await released.promise
+    await route.fulfill({response})
+    delivered.resolve()
+  }
+  await page.route('**/api/bridge',handler)
+  return {seen:seen.promise,release:released.resolve,delivered:delivered.promise,dispose:()=>page.unroute('**/api/bridge',handler)}
+}
+async function settleBrowser(page) {await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))}
 async function nav(page,name) {await page.getByRole('navigation',{name:'分析导航'}).getByRole('button',{name:new RegExp(`^${name}`)}).click()}
 async function run(page) {
   const response=bridgeResponse(page,'run')
@@ -53,17 +80,36 @@ async function screenshot(page,info,name) {
 }
 
 test.beforeEach(async({page})=>{
-  page.__errors=[];page.__commands=[]
+  page.__errors=[];page.__commands=[];page.__bridgeTimeline=[];page.__bridgeDiagnostics=[]
+  const requests=new WeakMap(),start=Date.now()
   page.on('pageerror',error=>page.__errors.push(error.message))
   page.on('console',message=>{if(message.type()==='error')page.__errors.push(message.text())})
-  page.on('request',request=>{if(request.url().endsWith('/api/bridge'))page.__commands.push(request.postDataJSON()?.command)})
+  page.on('request',request=>{
+    if(!request.url().endsWith('/api/bridge')) return
+    const payload=request.postDataJSON(),id=page.__commands.length+1
+    requests.set(request,id);page.__commands.push(payload.command)
+    page.__bridgeTimeline.push({event:'request',id,at:Date.now()-start,command:payload.command,reference_group:payload.reference_group,reference_assigned_value:payload.reference_assigned_value})
+  })
+  page.on('requestfinished',request=>{
+    if(!requests.has(request)) return
+    const task=(async()=>{
+      try {
+        const response=await request.response(),body=await response.json()
+        page.__bridgeTimeline.push({event:'finished',id:requests.get(request),at:Date.now()-start,status:response.status(),ok:body.ok,error:body.error,reference_group:body.report?.options?.reference_group,reference_assigned_value:body.report?.options?.reference_assigned_value})
+      } catch(error) {page.__bridgeTimeline.push({event:'diagnostic-error',id:requests.get(request),at:Date.now()-start,error:String(error)})}
+    })()
+    page.__bridgeDiagnostics.push(task)
+  })
+  page.on('requestfailed',request=>{if(requests.has(request))page.__bridgeTimeline.push({event:'failed',id:requests.get(request),at:Date.now()-start,error:request.failure()?.errorText})})
   await page.goto('/')
   await expect(page.getByRole('grid',{name:'96 孔板',exact:true})).toBeVisible()
   await expect(page.locator('.status-bar')).toContainText('已自动保存到本机')
 })
 test.afterEach(async({page},info)=>{
+  await Promise.allSettled(page.__bridgeDiagnostics)
   await info.attach('browser-console-errors',{body:JSON.stringify(page.__errors),contentType:'application/json'})
   await info.attach('bridge-commands',{body:JSON.stringify(page.__commands),contentType:'application/json'})
+  await info.attach('bridge-request-timeline',{body:JSON.stringify(page.__bridgeTimeline),contentType:'application/json'})
   expect(page.__errors,'No runtime or console errors').toEqual([])
 })
 
@@ -82,14 +128,16 @@ test('plate-only comparison uses the real engine and result reference edits reno
   await expect(page.getByRole('cell',{name:'40 X',exact:true})).toBeVisible()
   await screenshot(page,info,'plate-results-1366x768')
   await page.getByRole('combobox',{name:'结果参比组',exact:true}).selectOption('Sample_4X')
-  const response=page.waitForResponse(response=>response.url().endsWith('/api/bridge')&&response.request().postDataJSON()?.command==='renormalize'&&response.request().postDataJSON()?.reference_assigned_value===7)
+  const request=referenceRequest(page,'Sample_4X',7)
   await page.getByLabel('结果参比赋值（X）',{exact:true}).fill('=14/2')
   await page.getByLabel('结果参比赋值（X）',{exact:true}).press('Tab')
-  const normalized=await(await response).json()
-  expect(normalized.ok,normalized.error).toBe(true)
+  const normalized=await requestBody(await request)
+  expect(normalized.report.options.reference_group).toBe('Sample_4X')
+  expect(normalized.report.options.reference_assigned_value).toBe(7)
   await expect(page.getByRole('cell',{name:'1.75 X',exact:true})).toBeVisible()
   await expect(page.getByRole('cell',{name:'7 X',exact:true})).toBeVisible()
   expect(page.__commands.filter(command=>command==='run')).toHaveLength(1)
+  expect(page.__bridgeTimeline.filter(event=>event.event==='request'&&event.command==='renormalize'&&event.reference_group==='Sample_4X'&&event.reference_assigned_value===7)).toHaveLength(1)
   expect(fitOnly(normalized)).toEqual(fitOnly(body))
   const count=page.__commands.length
   await page.getByRole('button',{name:'切换到夜间模式',exact:true}).click()
@@ -104,6 +152,49 @@ test('plate-only comparison uses the real engine and result reference edits reno
   await expect(image).toBeVisible();expect(await image.getAttribute('src')).toBe(body.previews[0].data_url)
   expect(await image.evaluate(element=>element.complete&&element.naturalWidth>0)).toBe(true)
   await screenshot(page,info,'plate-plots-1366x768')
+})
+
+test('latest reference wins reversed real success and error responses; formula blur never duplicates its request',async({page},info)=>{
+  await example(page);const original=await run(page)
+  const staleSuccess=await holdReferenceResponse(page,'Sample_4X',10)
+  try {
+    await page.getByRole('combobox',{name:'结果参比组',exact:true}).selectOption('Sample_4X')
+    const old=await staleSuccess.seen
+    expect(old.ok,old.error).toBe(true)
+    const request=referenceRequest(page,'Sample_4X',7)
+    const input=page.getByLabel('结果参比赋值（X）',{exact:true})
+    await input.fill('=14/2');await input.press('Tab')
+    const newest=await requestBody(await request)
+    await expect(page.getByRole('cell',{name:'1.75 X',exact:true})).toBeVisible()
+    expect(fitOnly(newest)).toEqual(fitOnly(original))
+    const oldResponse=bridgeResponse(page,'renormalize')
+    staleSuccess.release();await staleSuccess.delivered;await(await oldResponse).finished();await settleBrowser(page)
+    await expect(page.getByRole('cell',{name:'1.75 X',exact:true})).toBeVisible()
+    await expect(input).toHaveValue('7')
+    expect((await save(page,info,'latest-reference-success.json')).record.result).toEqual(newest)
+  } finally {staleSuccess.release();await staleSuccess.dispose()}
+
+  const staleError=await holdReferenceResponse(page,'Sample_4X',0)
+  try {
+    const input=page.getByLabel('结果参比赋值（X）',{exact:true})
+    await input.fill('0');await input.press('Tab')
+    const old=await staleError.seen
+    expect(old.ok).toBe(false)
+    const request=referenceRequest(page,'Sample_4X',8)
+    await input.fill('=16/2');await input.press('Tab')
+    const newest=await requestBody(await request)
+    await expect(page.getByRole('cell',{name:'2 X',exact:true})).toBeVisible()
+    const oldResponse=bridgeResponse(page,'renormalize')
+    staleError.release();await staleError.delivered;await(await oldResponse).finished();await settleBrowser(page)
+    await expect(page.getByRole('cell',{name:'2 X',exact:true})).toBeVisible()
+    await expect(page.getByRole('cell',{name:'8 X',exact:true})).toBeVisible()
+    await expect(input).toHaveValue('8')
+    await expect(page.locator('.status-bar')).toContainText('参比归一已更新')
+    expect((await save(page,info,'latest-reference-error.json')).record.result).toEqual(newest)
+    expect(fitOnly(newest)).toEqual(fitOnly(original))
+  } finally {staleError.release();await staleError.dispose()}
+  expect(page.__commands.filter(command=>command==='run')).toHaveLength(1)
+  for(const value of [7,8]) expect(page.__bridgeTimeline.filter(event=>event.event==='request'&&event.command==='renormalize'&&event.reference_assigned_value===value)).toHaveLength(1)
 })
 
 test('confirmed plate and model edits clear results and plots, while arithmetic drafts and cancellation preserve them',async({page})=>{

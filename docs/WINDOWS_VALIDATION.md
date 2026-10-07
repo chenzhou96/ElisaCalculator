@@ -164,8 +164,9 @@ installation, installed binary hash checks, frozen-engine calculation, unchanged
 fit/plot reference normalization (10X/40X to 1.75X/7X), and six exports. Native
 1440×900 pixels were checked. At 150% display scaling the old 600-logical-pixel
 minimum height forced 900 physical pixels, so a requested 1366×768 physical
-window could not fit. Interactive history/editing acceptance is being continued
-separately and is not claimed as complete here.
+window could not fit. Native Windows 11 editor/history/reference acceptance for
+that 0.3.0 binary was subsequently completed before PR #1 merged into `main`
+at `923c3da65d7839f4ffc12e97ce8092faf3c37d25`. This does not validate 0.3.1 sizing.
 
 Version 0.3.1 creates a visible, centered window with native overflow prevention
 and a small initial workspace. After configured-window creation and setup have
@@ -180,6 +181,15 @@ so this fallback cannot silently count as validated sizing. Sixteen pure Rust ca
 and small/invalid areas. The short-height CSS retains all 96 wells and readable OD
 text, uses an accessible icon rail, and scrolls the right editor internally.
 Scientific calculations, native history paths, and record schema are unchanged.
+
+The smoke harness awaits a newline-complete Ready sizing record within the
+existing launch timeout, then checks a full five seconds of window stability.
+It rejects missing, malformed, non-Boolean, array-root and duplicate results;
+`fit_ok:false` and either outer/client work-area overflow still fail the gate.
+Startup UTC/elapsed timing and any fit error are preserved in the bounds report.
+The completion parser is regression-tested in Windows CI before packaging.
+See [the October 7 maintenance record](MAINTENANCE_2026-10-07.md) for the prior
+failed-run evidence and the limits of the diagnosis.
 
 The native bounds probe accounts for the documented
 [GetWindowRect DPI virtualization](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowrect)
