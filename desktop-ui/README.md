@@ -57,14 +57,6 @@ The shell uses bounded plate, editor, results and history panels. Short-screen l
 
 Build and lint are required. Unit, DOM-handler and real-Python checks are distinct from browser pixels and native installation. Browser CI keeps Chromium sandboxing enabled; do not disable it when the execution environment blocks browser startup. [October 7 maintenance](../docs/MAINTENANCE_2026-10-07.md) and [Windows validation](../docs/WINDOWS_VALIDATION.md) record version-specific evidence and remaining acceptance limits.
 
-## macOS local native verification
+## Standalone Apple Silicon Mac package
 
-On macOS, Tauri merges `src-tauri/tauri.macos.conf.json` with the base configuration. The override builds a local `.app` and maps the Python source into `Contents/Resources`. The Windows NSIS target, PowerShell bridge build and `.exe` resource remain in the base configuration.
-
-With Rust/Cargo on PATH and the scientific Python environment available as `python`:
-
-```sh
-npm run tauri:build -- --debug
-```
-
-This local macOS bundle uses the existing Python environment; it does not include a standalone Python runtime. A distribution-ready Mac package, Developer ID signing, notarization and clean-machine installation require separate verification.
+The macOS override freezes the Python/SciPy engine inside the app and builds a native ARM64 `.app`. The Mac workflow verifies the copied app, engine and native startup, then creates and mounts a `.dmg` with commit-specific checksums. It targets macOS 14.0 or newer and uses an ad-hoc signature only; it is not Developer ID signed or notarized. See [Mac packaging and verification](../docs/MACOS_VALIDATION.md) for installation, reproduction and remaining acceptance limits.

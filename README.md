@@ -74,6 +74,10 @@ npm run tauri:build
 
 GitHub Actions 构建包含冻结 bridge 的 Windows NSIS 安装包，并提供 commit、依赖清单和 SHA-256。安装器包含离线 WebView2 安装器，可能较大；不把源码构建成功称为已实际安装成功。真实 Win11 与以后 Win10 验收必须按 Windows 文档逐项记录。
 
+## Apple Silicon Mac 包
+
+Mac 工作流构建 M1 等 Apple Silicon 的独立 ARM64 `.dmg`（macOS 14.0+），内置 Python/SciPy 引擎，无需用户安装开发环境。下载时按工作分支 commit 核对 `BUILD_METADATA.json` 与 SHA-256。包只有 ad-hoc 签名，未做 Developer ID 签名及 Apple 公证，首次打开可能被 Gatekeeper 阻止；安装方式、测试证据与验证边界见 [Mac 验证](docs/MACOS_VALIDATION.md)。
+
 ## 结构
 
 elisa_calculator/core 为科学计算与无重拟合归一；io 为解析/导出；bridge.py 为 JSON 协议；desktop-ui 为 React、原生 Rust 桥接及持久快照。后端保留旧科学接口供历史兼容与回归核对，当前桌面新建工作流只提供孔板比较。

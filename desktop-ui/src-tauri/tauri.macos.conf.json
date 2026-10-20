@@ -1,15 +1,19 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "build": {
-    "beforeBuildCommand": "npm run build"
+    "beforeBuildCommand": "npm run build && python3 scripts/build-bridge-macos.py"
   },
   "bundle": {
     "targets": [
       "app"
     ],
     "resources": {
-      "../../elisa_calculator": "elisa_calculator",
-      "../../ElisaCalculator.py": "ElisaCalculator.py"
+      "resources/bridge/elisa_bridge": "bridge/elisa_bridge"
+    },
+    "macOS": {
+      "minimumSystemVersion": "14.0",
+      "signingIdentity": "-",
+      "hardenedRuntime": true
     }
   }
 }
