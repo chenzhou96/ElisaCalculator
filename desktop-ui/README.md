@@ -38,7 +38,7 @@ There is no separate editable table, standard-curve or unknown-sample workflow. 
 
 `elisa-analysis/2` portable JSON records and native analysis history retain inputs, plate assignments, original fits, results, plots and reference settings. Valid complete snapshots restore without a Python refit; input/model changes require a new analysis. `elisa-analysis/1` records restore inputs only and never invent trusted fitted results. The scientific export `Analysis_Record.json` is an audit file, not a portable UI restore record.
 
-Desktop persistence uses atomic writes in app data. Native close waits for durable saving and retains the window on failure. Browser development uses IndexedDB, which may be cleared by browser privacy/storage policies. Keep independent JSON backups. Wait for a reference update to finish before saving a portable record: the existing save control can capture new reference settings while the previous normalized report is still displayed; restore reconciles that reference through normalization without refitting.
+Desktop persistence uses atomic writes in app data. Native close waits for durable saving and retains the window on failure. Browser development uses IndexedDB, which may be cleared by browser privacy/storage policies. Keep independent JSON backups. Both portable-record save entries are temporarily disabled while a reference update is pending, so a downloaded record cannot pair new reference settings with the previous normalized report. Saving becomes available after success or after a failed update restores the prior reference. Existing older mixed-state records still reconcile their reference on restore without refitting.
 
 ## Frontend structure
 

@@ -209,6 +209,42 @@ function fitOnly(response) {return {details:response.report.detailed_rows.map(({
   } finally {release();transportGate=null}
  })
 
+ for (const value of [7, 0]) test(`portable record saving waits for a pending reference ${value ? 'success' : 'failure'}`, async () => {
+  await mount(); click('载入板示例'); const original = await run()
+  await waitFor(() => assert.equal(bridgeInFlight, 0), {timeout: 60_000})
+  let release, observed, downloads = 0
+  const held = new Promise(resolve => {release = resolve}), seen = new Promise(resolve => {observed = resolve})
+  const create = URL.createObjectURL, revoke = URL.revokeObjectURL, anchor = window.HTMLAnchorElement.prototype.click
+  URL.createObjectURL = () => {downloads++; return 'blob:blocked-reference-save'}
+  URL.revokeObjectURL = () => {}
+  window.HTMLAnchorElement.prototype.click = () => {}
+  transportGate = {command: 'renormalize', hold: async () => {observed(); await held}}
+  try {
+    change('结果参比赋值（X）', String(value)); await seen
+    const toolbar = screen.getByRole('button', {name: '保存记录', exact: true})
+    assert.equal(toolbar.disabled, true, 'Do not export new reference input with the previous normalization')
+    assert.match(toolbar.title, /参比.*完成/)
+    fireEvent.click(toolbar)
+    click('文件')
+    const menu = screen.getByRole('menuitem', {name: '保存分析记录…', exact: true})
+    assert.equal(menu.disabled, true)
+    fireEvent.click(menu)
+    assert.equal(downloads, 0, 'Neither save entry point may download an inconsistent portable record')
+    click('文件')
+    release(); await waitFor(() => assert.equal(bridgeInFlight, 0), {timeout: 60_000})
+    await waitFor(() => assert.equal(screen.getByRole('button', {name: '保存记录', exact: true}).disabled, false))
+    const saved = await savedRecord()
+    const expected = value || original.report.options.reference_assigned_value
+    assert.equal(saved.inputs.options.reference_assigned_value, expected)
+    assert.equal(saved.result.report.options.reference_assigned_value, expected)
+    assert.deepEqual(fitOnly(saved.result), fitOnly(original))
+  } finally {
+    release(); transportGate = null
+    URL.createObjectURL = create; URL.revokeObjectURL = revoke; window.HTMLAnchorElement.prototype.click = anchor
+    await waitFor(() => assert.equal(bridgeInFlight, 0), {timeout: 60_000})
+  }
+ })
+
  test('plate draft edits, arithmetic and cancel do not write; confirmed OD and model edits invalidate result and previews',async()=>{
   await mount();click('载入板示例');await run()
   const count=scientificCalls.length

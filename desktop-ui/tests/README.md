@@ -30,6 +30,7 @@ Coverage includes:
 - Full `elisa-analysis/2` JSON snapshots restore existing results and plots without computation; malformed or stale imports preserve current work
 - Legacy `elisa-analysis/1` table/standard inputs and settings remain intact and read-only; untrusted v1 result fields are not shown as historical fits
 - IndexedDB session restoration and history recall without re-fitting; failed recovery preserves original durable bytes until explicit confirmed replacement; failed autosave retains results and retries without fitting; delayed scientific responses cannot overwrite changed inputs
+- Portable-record toolbar and File-menu downloads wait for pending reference normalization; success/failure recovery preserves matching input/report assignments without a new fit
 - Focused editor integration separately covers saved single/multi/mixed selection, original gradient coordinates and atomic apply/cancel
 
 DOM scientific-call summaries are written to `artifacts/qa/dom-scientific-calls.json` (gitignored). DOM integration does not measure layout, CSS rendering, actual image decoding, browser mouse behavior, or native OS dialogs. It must not be reported as a passed browser/screenshot check.

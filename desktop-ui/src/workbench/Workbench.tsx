@@ -305,6 +305,8 @@ export default function Workbench() {
     }
   }
   function saveRecord() {
+    // A portable record must never pair a new reference input with old results.
+    if (normalizationPending) return;
     try {
       const blob = new Blob([serializeRecord(state)], {
         type: "application/json",
@@ -389,7 +391,8 @@ export default function Workbench() {
                   <button
                     role="menuitem"
                     onClick={saveRecord}
-                    disabled={!hasInputs}
+                    title={normalizationPending ? "参比更新中，请等待完成后保存记录" : "下载包含原始输入、配置与结果的 JSON"}
+                    disabled={!hasInputs || normalizationPending}
                   >
                     保存分析记录…
                   </button>
@@ -554,9 +557,9 @@ export default function Workbench() {
             <div className="page-actions">
               <button onClick={() => void openHistory()} disabled={!!state.busy}>分析历史</button>
               <button
-                title="下载包含原始输入、配置与结果的 JSON"
+                title={normalizationPending ? "参比更新中，请等待完成后保存记录" : "下载包含原始输入、配置与结果的 JSON"}
                 onClick={saveRecord}
-                disabled={!hasInputs}
+                disabled={!hasInputs || normalizationPending}
               >
                 <Icon name="download" />
                 保存记录
