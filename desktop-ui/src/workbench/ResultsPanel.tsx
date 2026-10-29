@@ -29,14 +29,16 @@ export default function ResultsPanel({
       </Empty>
     );
   const dimensionless = state.result?.report?.options?.dose_basis === "dimensionless";
+  const stockRelative = !dimensionless && rows.some(row => typeof row.Relative_stock_potency_X === "number" && Number.isFinite(row.Relative_stock_potency_X) && row.Relative_stock_potency_X > 0);
+  const showRelativeX = dimensionless || stockRelative;
   const supportsReferenceEdit = (state.result?.report?.metadata?.reference_fit_context as {schema?: string} | undefined)?.schema === "elisa-reference-fit-context/1";
   const standard = state.options.workflow === "standard_curve";
   const showUnknown = standard && tab === "unknown";
   const count = showUnknown ? unknowns.length : rows.length;
   const safePage = Math.min(page, Math.max(0, Math.ceil(count / 4) - 1));
   const warnings =
-    rows.filter((row) => row.Warning).length +
-    unknowns.filter((row) => row.Warning).length;
+    rows.filter((row) => row.Warning || row.Status !== "Success").length +
+    unknowns.filter((row) => row.Warning || row.Status !== "Success").length;
   return (
     <div className="results-layout">
       {state.resultOrigin === "historical" && <div className="notice warning">历史结果快照{state.recordSavedAt ? ` · ${state.recordSavedAt}` : ""} · 恢复时未重新计算</div>}
@@ -45,42 +47,9 @@ export default function ResultsPanel({
         <Field label="结果参比赋值（X）"><NumericInput value={state.options.reference_assigned_value} disabled={!supportsReferenceEdit || !!state.busy} onValueChange={value => dispatch({type: "options", patch: {reference_assigned_value: value ?? NaN}})} /></Field>
         <p role="status">{normalizationPending ? "正在更新参比归一 · 拟合参数保持不变" : supportsReferenceEdit ? "修改参比立即归一，不重新拟合" : "旧版快照缺少原始协方差；需重新分析后才能修改参比"}</p>
       </div>}
-      <div className="metric-grid">
-        <div className="metric">
-          <span>{standard ? "标准曲线" : "分析曲线"}</span>
-          <strong>
-            {rows.length}
-            <small>组</small>
-          </strong>
-          <p>
-            {state.options.fit_mode === "shared"
-              ? "共享 A / D 全局 4PL"
-              : "独立 4PL 拟合"}
-          </p>
-        </div>
-        <div className="metric">
-          <span>{standard ? "未知样品" : "参考组"}</span>
-          <strong className="metric-text">
-            {standard
-              ? `${unknowns.length} 个`
-              : (state.options.reference_group ?? "—")}
-          </strong>
-          <p>
-            {standard
-              ? "原样浓度已乘稀释倍数"
-              : `参考赋值 ${state.options.reference_assigned_value} X`}
-          </p>
-        </div>
-        <div className="metric">
-          <span>质量检查</span>
-          <strong>
-            {warnings}
-            <small>条目有警告</small>
-          </strong>
-          <p>
-            {warnings ? "请检查警告与拟合曲线" : "仍需核对模型假设与实验设计"}
-          </p>
-        </div>
+      <div className="result-context" aria-label="分析概况">
+        <span>{rows.length} 组曲线 · {state.options.fit_mode === "shared" ? "共享 A / D 全局 4PL" : "独立 4PL 拟合"}</span>
+        <span className={warnings ? "result-quality-warning" : ""}>{warnings ? `${warnings} 个条目需检查` : "未触发自动警告；仍需实验验证"}</span>
       </div>
       {state.result?.export_error && (
         <div className="notice warning" role="alert">
@@ -94,7 +63,32 @@ export default function ResultsPanel({
           图像预览：{warning}
         </div>
       ))}
-      <Card
+      {!standard && <section className="comparison-summary" aria-labelledby="comparison-title" aria-busy={normalizationPending}>
+        <div className="comparison-heading"><h2 id="comparison-title">{dimensionless ? "各组相对参比 · 中点相对值 X" : stockRelative ? "各组相对参比 · 表观原液强度 X" : "各组相对参比 · EC50 比较"}</h2>
+          <p>{dimensionless ? "X = 参比赋值 × EC50(参比) / EC50(本组)；未证明曲线平行或恒定生物效价。" : stockRelative ? "原液 X 按声明的起始浓度和中点原液分数比较；未证明曲线平行或恒定生物效价。" : "EC50 比值 = 本组 / 参比；未声明原液浓度时，不推断原液 X。"} 条件置信区间仅为局部拟合近似。</p>
+        </div>
+        <div className="comparison-table-scroll"><table className="comparison-table" aria-label="各组相对参比结果">
+          <thead><tr><th>组名</th><th>{showRelativeX ? "参比归一 X" : "EC50 比值"}<small>{showRelativeX ? `参比赋值 ${fmt(state.options.reference_assigned_value)} X` : "本组 / 参比"}</small></th><th>{showRelativeX ? "条件 95% CI（X）" : "EC50 · 95% CI"}</th><th>拟合 / 比较检查</th></tr></thead>
+          <tbody>{rows.map(row => {
+            const value = dimensionless ? row.Normalized_midpoint_X : stockRelative ? row.Relative_stock_potency_X : row.EC50_ratio;
+            const relativeToReference = stockRelative ? (typeof row.Relative_stock_potency_X === "number" && (state.result?.report?.options?.reference_assigned_value ?? 0) > 0 ? row.Relative_stock_potency_X / state.result!.report!.options!.reference_assigned_value : null) : typeof row.EC50_ratio === "number" && Number.isFinite(row.EC50_ratio) && row.EC50_ratio > 0 ? 1 / row.EC50_ratio : null;
+            const usable = row.Status === "Success" && typeof value === "number" && Number.isFinite(value) && value > 0;
+            const low = dimensionless ? row.Normalized_midpoint_X_CI_low : stockRelative ? row.Relative_stock_potency_X_CI_low : row.EC50_CI_low;
+            const high = dimensionless ? row.Normalized_midpoint_X_CI_high : stockRelative ? row.Relative_stock_potency_X_CI_high : row.EC50_CI_high;
+            const hasCI = typeof low === "number" && Number.isFinite(low) && typeof high === "number" && Number.isFinite(high);
+            // Only routine replication/dose-basis notices collapse. Scientific qualification stays expanded.
+            const warningParts = (row.warning_list?.length ? row.warning_list : [row.Warning]).flatMap(warning => warning.split(";"));
+            const criticalWarning = warningParts.some(warning => warning.trim() && !/replicate observations|technical replicates|EC50 is on a dimensionless dose scale|no original.stock fraction or absolute concentration is inferred|^midpoint comparison only: parallel response curves and constant biological potency have not been established\.?$/i.test(warning.trim()));
+            return <tr key={row.Group} className={selected === row.Group ? "selected-row" : ""}>
+              <td className="name-cell"><button className="result-group-button" onClick={() => onSelect(row.Group)} aria-pressed={selected === row.Group}>{row.Group}</button>{row.Group === state.options.reference_group && <span className="mini-tag">参比</span>}</td>
+              <td className="comparison-value">{normalizationPending ? <span className="comparison-unavailable">更新中…</span> : usable ? <>{fmt(value)}{showRelativeX && <small> X</small>}{showRelativeX && relativeToReference !== null && Number.isFinite(relativeToReference) && <span className="relative-reference">{stockRelative ? "原液相对值" : "中点比值"} {fmt(relativeToReference)} 倍于参比</span>}</> : <span className="comparison-unavailable">—<small>不可比较</small></span>}</td>
+              <td className="comparison-ci">{!showRelativeX && <span>{fmt(row.EC50)} {row.EC50_unit}<br /></span>}{normalizationPending ? "更新中…" : usable && hasCI ? `${fmt(low)} – ${fmt(high)}` : "不提供区间"}</td>
+              <td>{row.Status !== "Success" ? <div className="comparison-warning"><strong>拟合失败 · 不提供倍数</strong><p>{row.Warning || row.Status}</p></div> : row.Warning ? <details className="comparison-warning" open={!usable || criticalWarning}><summary>{!usable ? "比较不可用 · 查看原因" : criticalWarning ? "比较条件警告 · 请审阅" : "需检查 · 查看警告"}</summary><p>{row.Warning}</p></details> : <span>{usable ? "拟合成功" : "比较不可用"}<small>{usable ? "仍需核对曲线与实验设计" : "请查看拟合详情及适用条件"}</small></span>}</td>
+            </tr>;
+          })}</tbody>
+        </table></div>
+      </section>}
+      <details className="result-fit-details" open={standard || undefined}><summary>拟合参数与比较明细 · EC50、R²、状态</summary><Card
         title={showUnknown ? "未知样品浓度" : "曲线参数与比较"}
         subtitle={
           showUnknown
@@ -236,7 +230,7 @@ export default function ResultsPanel({
           </table>
         </div>
         <Pager page={safePage} count={count} size={4} onChange={setPage} />
-      </Card>
+      </Card></details>
       <div className="result-note">
         <strong>解读边界</strong>
         <p>
@@ -258,7 +252,7 @@ export function ResultInspector({ row }: { row: SummaryRow }) {
           <b>{fmt(row.LogEC50)}</b>
         </div>
         <div>
-          <span>EC50 95% CI</span>
+          <span>EC50 95% CI {row.EC50_unit}</span>
           <b>
             {fmt(row.EC50_CI_low)} – {fmt(row.EC50_CI_high)}
           </b>

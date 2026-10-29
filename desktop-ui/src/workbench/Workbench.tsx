@@ -538,7 +538,7 @@ export default function Workbench() {
             </div>
           </aside>
         )}
-        <main className="main-workspace">
+        <main className={`main-workspace ${state.page === "results" ? "results-workspace" : ""}`}>
           <div className="page-heading">
             <div>
               {!sidebar && (
@@ -550,7 +550,6 @@ export default function Workbench() {
                   <Icon name="menu" />
                 </button>
               )}
-              <span className="eyebrow">96-WELL COMPARATIVE ANALYSIS</span>
               <div className="data-heading-title"><h1>{pageNames[state.page]}</h1></div>
               <p>{pageSubtitles[state.page]}</p>
             </div>

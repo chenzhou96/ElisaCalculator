@@ -18,7 +18,7 @@
     "tauri:build:msi:offline": "tauri build --bundles msi",
     "test": "node --experimental-strip-types --test tests/model.test.mjs tests/record.test.mjs tests/plate.test.mjs tests/browser-config.test.mjs tests/arithmetic.test.mjs tests/history.test.mjs tests/history-browser.test.mjs",
     "test:e2e": "playwright test",
-    "test:integration": "node --test --test-concurrency=1 tests/dom.integration.test.mjs tests/plate.editor.integration.test.mjs tests/native.close.integration.test.mjs tests/native.startup.integration.test.mjs",
+    "test:integration": "node --test --test-concurrency=1 tests/dom.integration.test.mjs tests/plate.editor.integration.test.mjs tests/results.presentation.integration.test.mjs tests/native.close.integration.test.mjs tests/native.startup.integration.test.mjs",
     "test:plate-science": "node --experimental-strip-types --test tests/plate.science.test.mjs"
   },
   "dependencies": {

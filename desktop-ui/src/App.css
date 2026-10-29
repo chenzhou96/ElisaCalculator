@@ -2097,3 +2097,64 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
   .app-caption { display: none; }
   .app-menus { flex: 1; }
 }
+
+/* Results put the scientific comparison first, not decorative dashboard metrics. */
+.results-workspace .page-heading { min-height: 48px; }
+.results-layout { gap: 10px; }
+.result-context { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; font-size: 11px; color: var(--text-soft, #53655a); flex: none; }
+.result-quality-warning { color: var(--warning-text, #81642e); }
+.results-layout .reference-controls { padding: 9px 12px; gap: 8px 14px; align-items: center; }
+.results-layout .reference-controls .field { margin-bottom: 0; }
+.results-layout .reference-controls input, .results-layout .reference-controls select { min-height: 30px; font-size: 12px; }
+.results-layout .reference-controls p { margin: 0; font-size: 11px; }
+.comparison-summary { flex: none; border: 1px solid var(--border, #dce2de); border-radius: 8px; background: var(--surface, #fff); overflow: hidden; }
+.comparison-heading { padding: 10px 13px 8px; }
+.comparison-heading h2 { font-size: 14px; }
+.comparison-heading p { font-size: 11px; line-height: 1.55; color: var(--text-soft, #53655a); margin-top: 4px; }
+.comparison-table-scroll { overflow-x: auto; }
+.comparison-table { table-layout: fixed; min-width: 550px; }
+.comparison-table th, .comparison-table td { padding: 8px 12px; font-size: 12px; }
+.comparison-table th:nth-child(1) { width: 25%; }
+.comparison-table th:nth-child(2) { width: 22%; }
+.comparison-table th:nth-child(3) { width: 23%; }
+.comparison-table th:nth-child(4) { width: 30%; }
+.comparison-table th small, .comparison-table td small { font-size: 10px; color: var(--text-soft, #53655a); }
+.comparison-table tr:last-child td { border-bottom: 0; }
+.comparison-table .comparison-value { font-size: 23px; font-weight: 650; color: var(--accent-text, #355b43); white-space: nowrap; }
+.comparison-value > small { display: inline; font-size: 13px; color: inherit; }
+.comparison-value .comparison-unavailable { font-size: 13px; font-weight: 500; color: var(--warning-text, #81642e); }
+.result-group-button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; justify-content: flex-start; min-height: 30px; padding: 3px 0; border: 0; background: transparent; font-weight: 600; font-size: 12px; }
+.result-group-button:hover:not(:disabled) { background: var(--tint); }
+.comparison-ci { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.comparison-warning { color: var(--warning-text, #81642e); font-size: 11px; }
+.comparison-warning summary { cursor: pointer; padding: 4px 0; min-height: 28px; }
+.comparison-warning p { margin-top: 4px; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.result-fit-details { flex: none; }
+.result-fit-details > summary { cursor: pointer; padding: 8px 2px; font-size: 12px; min-height: 32px; color: var(--text-soft, #53655a); }
+.result-fit-details .results-card { margin-top: 5px; }
+.result-note { flex: none; }
+@media (max-width: 760px) {
+  .comparison-table { min-width: 540px; }
+  .result-group-button, .comparison-warning summary { min-height: 44px; }
+}
+.results-layout .reference-controls { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(130px, .8fr) minmax(170px, 1.4fr); flex: none; border: 1px solid var(--border, #dce2de); border-radius: 8px; background: var(--surface-soft, #f8faf8); }
+.results-layout .reference-controls .field { margin: 0; }
+.results-layout .reference-controls .field > span { font-size: 11px; margin-bottom: 4px; }
+@media (max-width: 760px) { .results-layout .reference-controls { grid-template-columns: 1fr 1fr; } .results-layout .reference-controls p { grid-column: 1 / -1; } }
+/* Batch setup is a shortcut through the existing plate model, not a new analysis workflow. */
+.batch-editor textarea { width: 100%; min-height: 82px; resize: vertical; font-size: 12px; line-height: 1.6; }
+.batch-editor .field, .batch-editor .field-grid { margin-left: 0; margin-right: 0; }
+.batch-preview { border: 1px solid var(--border, #dce2de); border-radius: 6px; padding: 8px; margin-bottom: 10px; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.batch-preview ul { list-style: none; padding: 0; margin: 6px 0 0; }
+.batch-preview li + li { margin-top: 5px; }
+.batch-preview li span { display: block; color: var(--text-soft, #53655a); font-variant-numeric: tabular-nums; }
+.plate-editor-tabs button { min-height: 29px; }
+/* Recover useful viewport height by reducing repeated chrome, not data type sizes. */
+@media (min-width: 761px) and (min-height: 621px) {
+  .main-workspace, .workbench:not(.compact) .main-workspace { padding: 18px 24px 16px; gap: 12px; }
+  .page-heading { min-height: 48px; }
+  .plate-selection-bar { margin-top: 8px; }
+}
+.plate-modal, .modal { overscroll-behavior: contain; }
+@media (prefers-reduced-motion: reduce) { button { transition: none; } }
+.comparison-value .relative-reference { display: block; font-size: 11px; font-weight: 500; line-height: 1.5; color: var(--text-soft, #53655a); white-space: normal; }

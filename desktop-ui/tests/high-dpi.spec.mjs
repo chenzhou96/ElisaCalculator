@@ -201,7 +201,7 @@ test.describe('150% display scaling and monitor work-area layouts', () => {
       await page.getByRole('button', { name: '运行分析', exact: true }).click()
       const result = await (await response).json()
       expect(result.ok, result.error).toBe(true)
-      await expect(page.getByRole('cell', { name: '40 X', exact: true })).toBeVisible()
+      await expect(page.getByRole('cell', { name: /^40 X(?:\s|$)/ })).toBeVisible()
       await capture(page, info, `results-150pct-${width}x${height}`)
       await nav(page, '曲线预览')
       const image = page.getByRole('img', { name: /4PL 拟合曲线/ })

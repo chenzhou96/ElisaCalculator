@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type Dispatch, type CSSProperties } from "react";
+import { useEffect, useId, useRef, useState, type Dispatch, type CSSProperties } from "react";
 import type { Action, Workspace } from "./model";
 import { formatNumber } from "./model";
 import NumericInput from "./NumericInput";
+import { previewColumnBatch, type ColumnBatch } from "./plateBatch";
 import { Field } from "./Primitives";
 import type { InputProblem } from "./validation";
 import { applyPaste, compilePlate, coordinates, curveGroups, DEFAULT_ASSIGNMENT, KIND_LABELS, legacyPlateWells, NEW_WELL_KINDS, numericOD, plateExample, plateSelectionKey, previewPaste, previewPlateAssignment, readPlateSelection, rectangleIds, ROWS, selectWells, WELL_IDS, type Assignment, type PlateDocument, type PlateWell, type WellKind } from "./plate";
@@ -39,7 +40,12 @@ export function PlateAnalysisControls({state, dispatch}: {state: Workspace; disp
 }
 export default function PlatePanel({state, dispatch, parse, problem}: {state: Workspace; dispatch: Dispatch<Action>; parse: () => void; problem?: InputProblem | null}) {
   const p = state.plate;
-  const [panel, setPanel] = useState<"assign" | "analysis">("assign");
+  const tabId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const [panel, setPanel] = useState<"assign" | "batch" | "analysis">("assign");
+  const [batch, setBatch] = useState<ColumnBatch>({names: "", firstColumn: 1, replicateColumns: 2, firstRow: 0, lastRow: 7, start: 1, factor: 2, direction: "decreasing"});
+  let batchPreview: ReturnType<typeof previewColumnBatch> | null = null, batchError = "";
+  try {batchPreview = previewColumnBatch(p, batch);} catch (e) {batchError = e instanceof Error ? e.message : String(e);}
   const [editor, setEditor] = useState<{key: string; value: Assignment; unified: boolean; raw?: string} | null>(null);
   const [editorReset, setEditorReset] = useState(0);
   const [paste, setPaste] = useState<{text: string; origin: string; delimiter: "tab" | "csv"} | null>(null);
@@ -47,6 +53,25 @@ export default function PlatePanel({state, dispatch, parse, problem}: {state: Wo
   const [error, setError] = useState("");
   const [review, setReview] = useState(false);
   const [confirmation, setConfirmation] = useState<{plate: PlateDocument; version: number; label: string; selectionKey?: string; example?: Workspace["options"]["workflow"]} | null>(null);
+  const modalOpen = !!paste || !!confirmation || review;
+  useEffect(() => {
+    if (!modalOpen) return;
+    const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = root.current?.querySelector<HTMLElement>('[role="dialog"]');
+    if (!dialog) return;
+    const focusable = () => [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled):not([hidden]), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')];
+    const initial = dialog.querySelector<HTMLElement>('textarea') ?? dialog.querySelector<HTMLElement>('input:not(:disabled), select:not(:disabled)') ?? focusable()[0];
+    initial?.focus();
+    function trap(event: KeyboardEvent) {
+      if (event.key !== "Tab") return;
+      const targets = focusable(), first = targets[0], last = targets.at(-1);
+      if (!first) {event.preventDefault(); return;}
+      if (event.shiftKey && (document.activeElement === first || !dialog!.contains(document.activeElement))) {event.preventDefault(); last?.focus();}
+      else if (!event.shiftKey && (document.activeElement === last || !dialog!.contains(document.activeElement))) {event.preventDefault(); first.focus();}
+    }
+    dialog.addEventListener("keydown", trap);
+    return () => {dialog.removeEventListener("keydown", trap); if (before?.isConnected) before.focus();};
+  }, [modalOpen]);
   const drag = useRef<{anchor: string; base: string[]; additive: boolean} | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const compiled = compilePlate(p, state.options), selected = p.wells.filter(w => p.selected.includes(w.id));
@@ -112,7 +137,7 @@ export default function PlatePanel({state, dispatch, parse, problem}: {state: Wo
       openPaste(text); setPaste({text, origin: p.selected[0] ?? "A1", delimiter: f.name.toLowerCase().endsWith(".csv") ? "csv" : "tab"});
     } catch (e) {setError(e instanceof Error ? e.message : String(e));}
   }
-  return <div className="plate-workbench" onKeyDown={e => {
+  return <div ref={root} className="plate-workbench" onKeyDown={e => {
     const input = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement;
     if (!input && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {e.preventDefault(); dispatch({type: e.shiftKey ? "plate-redo" : "plate-undo"});}
     if (!input && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {e.preventDefault(); dispatch({type: "plate-redo"});}
@@ -122,8 +147,8 @@ export default function PlatePanel({state, dispatch, parse, problem}: {state: Wo
     e.preventDefault(); openPaste(e.clipboardData.getData("text/plain"));
   }}>
     <section className="card plate-board-card">
-      <header className="plate-toolbar"><div><h2>96 孔板 <span className="mini-tag">8 × 12</span></h2><p>粘贴读数 → 标记组别与剂量 → 运行分析</p></div><div className="button-row">
-        <button onClick={() => openPaste()}>粘贴读数</button><button onClick={() => file.current?.click()} disabled={!!state.busy}>导入板读数</button>
+      <header className="plate-toolbar"><div><h2>96 孔板 <span className="mini-tag">8 × 12</span></h2><p>粘贴 Excel 读数 → 批量分组或选孔标记 → 运行分析</p></div><div className="button-row">
+        <button className="secondary" onClick={() => openPaste()}>粘贴读数</button><button onClick={() => file.current?.click()} disabled={!!state.busy}>导入板读数</button>
         <button onClick={() => {const next = {type: "plate-example", workflow: "comparative"} as const; if (p.wells.some(w => w.raw || w.kind !== "unassigned")) setConfirmation({plate: plateExample("comparative"), version: state.version, label: "载入合成示例将替换当前板图及分析约定；可用撤销恢复原板图。", example: "comparative"}); else dispatch(next);}}>载入板示例</button>
       </div></header>
       <input ref={file} hidden type="file" accept=".csv,.tsv,.txt" aria-label="导入板读数文件" onChange={e => void loadPlate(e)} />
@@ -150,8 +175,23 @@ export default function PlatePanel({state, dispatch, parse, problem}: {state: Wo
       {!!legacy.length && <p className="plate-policy" role="status">兼容性提示：{legacy.length} 个旧版标准 / 未知孔位保留原类型、组名、剂量及稀释信息。逐组明确重标记为比较曲线、空白或排除后才能计算；选择孔位不会自动转换。</p>}
       <footer className="plate-check-bar"><div><b>{compiled.ok ? "映射可计算" : `${compiled.errors.length} 项待检查`}</b><span>{p.wells.filter(w => numericOD(w.raw) !== null).length} / 96 有效读数 · {compiled.groups.length} 拟合组 · 原始值保留</span><small title={compiled.errors.join("\n")}>{compiled.errors[0] || compiled.warnings[0] || "孔位、组别、浓度和复孔已明确"}</small></div><button className="secondary" onClick={() => setReview(true)}>检查孔位映射</button></footer>
     </section>
-    <aside className="card plate-editor"><div className="plate-editor-tabs" role="tablist" aria-label="孔板设置"><button role="tab" aria-selected={activePanel === "assign"} onClick={() => setPanel("assign")}>标记选中孔</button><button role="tab" aria-selected={activePanel === "analysis"} onClick={() => setPanel("analysis")}>分析约定</button></div><div className="plate-editor-body">
-      {activePanel === "analysis" ? <PlateAnalysisControls state={state} dispatch={dispatch} /> : <>
+    <aside className="card plate-editor"><div className="plate-editor-tabs" role="tablist" aria-label="孔板设置" onKeyDown={event => {
+      const tabs = ["assign", "batch", "analysis"] as const, index = tabs.indexOf(activePanel);
+      const next = event.key === "ArrowRight" ? (index + 1) % tabs.length : event.key === "ArrowLeft" ? (index + tabs.length - 1) % tabs.length : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : -1;
+      if (next < 0) return; event.preventDefault(); setPanel(tabs[next]); event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+    }}>{([['assign', '标记选中孔'], ['batch', '批量分组'], ['analysis', '分析约定']] as const).map(([id, label]) => <button key={id} id={`${tabId}-${id}`} role="tab" aria-controls={`${tabId}-panel`} aria-selected={activePanel === id} tabIndex={activePanel === id ? 0 : -1} onClick={() => setPanel(id)}>{label}</button>)}</div><div className="plate-editor-body" role="tabpanel" id={`${tabId}-panel`} aria-labelledby={`${tabId}-${activePanel}`}>
+
+      {activePanel === "analysis" ? <PlateAnalysisControls state={state} dispatch={dispatch} /> : activePanel === "batch" ? <div className="batch-editor">
+        <p className="plate-policy">按列连续稀释，一次标记多组。每列从上到下重启同一梯度；同组复孔共享组名，读数与区域外孔位不变。</p>
+        <Field label="批量组名（每行一组）"><textarea value={batch.names} onChange={e => setBatch({...batch, names: e.target.value})} spellCheck={false} autoComplete="off" name="batch-group-names" placeholder={"例如：Reference\nSample_A\nSample_B"} /></Field>
+        <div className="field-grid"><Field label="批量起始列"><select value={batch.firstColumn} onChange={e => setBatch({...batch, firstColumn: Number(e.target.value)})}>{Array.from({length: 12}, (_, c) => <option key={c} value={c + 1}>{c + 1}</option>)}</select></Field><Field label="每组复孔列数"><select value={batch.replicateColumns} onChange={e => setBatch({...batch, replicateColumns: Number(e.target.value)})}>{[1, 2, 3, 4, 6, 12].map(n => <option key={n} value={n}>{n} 列</option>)}</select></Field></div>
+        <div className="field-grid"><Field label="梯度起始行"><select value={batch.firstRow} onChange={e => setBatch({...batch, firstRow: Number(e.target.value)})}>{[...ROWS].map((r, i) => <option key={r} value={i}>{r}</option>)}</select></Field><Field label="梯度结束行"><select value={batch.lastRow} onChange={e => setBatch({...batch, lastRow: Number(e.target.value)})}>{[...ROWS].map((r, i) => <option key={r} value={i}>{r}</option>)}</select></Field></div>
+        <div className="field-grid"><Field label="批量起始量 / 浓度"><NumericInput value={batch.start} onValueChange={value => setBatch({...batch, start: value ?? NaN})} /></Field><Field label="批量梯度稀释倍数"><NumericInput value={batch.factor} onValueChange={value => setBatch({...batch, factor: value ?? NaN})} /></Field></div>
+        <Field label="批量浓度方向"><select value={batch.direction} onChange={e => setBatch({...batch, direction: e.target.value as ColumnBatch["direction"]})}><option value="decreasing">浓度递减 ↓</option><option value="increasing">浓度递增 ↑</option></select></Field>
+        <div className="batch-preview" role="status">{batchPreview ? <><strong>{batchPreview.groups.length} 组 · {batchPreview.ids.length} 孔 · {p.basis === "relative" ? "无量纲剂量" : p.unit}</strong><ul>{batchPreview.groups.map(group => <li key={group.group}><b>{group.group}</b><span>{group.ids[0]}–{group.ids.at(-1)} · {formatNumber(group.firstDose)} → {formatNumber(group.lastDose)}</span></li>)}</ul></> : <p>{batchError}</p>}</div>
+        <button className="primary assign-button" disabled={!batchPreview} onClick={() => {if (!batchPreview) return; if (JSON.stringify(batchPreview.plate.wells) === JSON.stringify(p.wells)) return; if (p.wells.some(w => batchPreview!.ids.includes(w.id) && w.kind !== "unassigned")) setConfirmation({plate: batchPreview.plate, version: state.version, label: `批量标记 ${batchPreview.groups.length} 组、${batchPreview.ids.length} 孔，覆盖区域内已有标记；原始读数及区域外孔位不变，可一次撤销。`}); else commit(batchPreview.plate);}}>应用批量分组</button>
+        <p className="plate-policy">应用后可点选任一组单独调整梯度。空白、排除与参比赋值仍须明确设置；此操作不自动扣空白或指定参比。</p>
+      </div> : <>
         <p className="plate-policy" role="status">{mixedBlocked ? "选中孔的类型、组名或梯度设置不一致。不会读取第一个孔覆盖其他孔；请明确选择统一设置后再应用。" : selectedSettings.status === "unassigned" ? "未分配孔：已恢复项目默认设置。预览不会写入板图。" : selectedSettings.status === "empty" ? "选择孔位以读取标记；所有修改在应用后写入。" : "已读取选中孔的已保存设置。梯度起点属于原组，选择或预览不会修改孔位。"}</p>
         {mixedBlocked && <button onClick={() => setEditor({key: selectionKey, value: {...DEFAULT_ASSIGNMENT}, unified: true})}>统一设置这些孔</button>}
         {selectedSettings.legacy && <p className="plate-policy">旧版标记只读兼容：请在孔类型中明确选择新类型。未知样品的原稀释校正信息仍保留在板图记录中。</p>}
@@ -172,7 +212,7 @@ export default function PlatePanel({state, dispatch, parse, problem}: {state: Wo
       </>}
     </div><p className="plate-keyboard">⌘ / Ctrl 单击多选 · Shift 矩形扩选<br />拖动框选 · 列号整列选 · 箭头键移动</p></aside>
     {error && <div className="plate-inline-error" role="alert">{error}<button aria-label="关闭孔板提示" onClick={() => setError("")}>×</button></div>}
-    {paste && preview && <div className="modal-backdrop"><section role="dialog" aria-modal="true" aria-label="粘贴读数预览" className="modal plate-modal"><h2>粘贴读数预览</h2><p>保持 A–H / 1–12 坐标，不自动转置、压缩空单元或把空值当 0。</p><div className="plate-paste-fields"><Field label="粘贴起始孔"><select value={paste.origin} onChange={e => setPaste({...paste, origin: e.target.value})}>{WELL_IDS.map(id => <option key={id}>{id}</option>)}</select></Field><Field label="读数分隔方式"><select value={paste.delimiter} onChange={e => setPaste({...paste, delimiter: e.target.value as "tab" | "csv"})}><option value="tab">Excel 制表符</option><option value="csv">CSV 逗号</option></select></Field></div><textarea autoFocus aria-label="Excel 孔板读数" value={paste.text} onChange={e => {setPaste({...paste, text: e.target.value}); setOverwrite(false); setAllowInvalid(false);}} spellCheck={false} placeholder="从 Excel 复制 8 行 × 12 列读数；也可从选定起始孔导入小矩形。" />
+    {paste && preview && <div className="modal-backdrop"><section role="dialog" aria-modal="true" aria-label="粘贴读数预览" className="modal plate-modal"><h2>粘贴读数预览</h2><p>保持 A–H / 1–12 坐标，不自动转置、压缩空单元或把空值当 0。</p><div className="plate-paste-fields"><Field label="粘贴起始孔"><select value={paste.origin} onChange={e => setPaste({...paste, origin: e.target.value})}>{WELL_IDS.map(id => <option key={id}>{id}</option>)}</select></Field><Field label="读数分隔方式"><select value={paste.delimiter} onChange={e => setPaste({...paste, delimiter: e.target.value as "tab" | "csv"})}><option value="tab">Excel 制表符</option><option value="csv">CSV 逗号</option></select></Field></div><textarea aria-label="Excel 孔板读数" value={paste.text} onChange={e => {setPaste({...paste, text: e.target.value}); setOverwrite(false); setAllowInvalid(false);}} spellCheck={false} placeholder="从 Excel 复制 8 行 × 12 列读数；也可从选定起始孔导入小矩形。" />
       <div className="paste-summary" role="status">{preview.error || `${preview.rows} × ${preview.columns} · ${preview.cells[0]?.id}–${preview.cells.at(-1)?.id} · ${missing} 缺失 · ${invalid} 非法 · ${existing} 现有读数将被覆盖`}</div>
       {!!preview.cells.length && <div className="paste-preview-table"><table><thead><tr><th>孔位</th>{Array.from({length: preview.columns}, (_, c) => <th key={c}>{coordinates(paste.origin)[1] + c + 1}</th>)}</tr></thead><tbody>{Array.from({length: preview.rows}, (_, r) => <tr key={r}><th>{ROWS[coordinates(paste.origin)[0] + r]}</th>{preview.cells.slice(r * preview.columns, (r + 1) * preview.columns).map(cell => <td key={cell.id} className={cell.issue ?? ""} title={`${cell.id}: ${cell.raw || "缺失"}`}>{cell.raw || "—"}</td>)}</tr>)}</tbody></table></div>}
       {!!invalid && <label className="plate-checkbox"><input type="checkbox" checked={allowInvalid} onChange={e => setAllowInvalid(e.target.checked)} />保留非法文本及其坐标（计算前必须修正或排除）</label>}
