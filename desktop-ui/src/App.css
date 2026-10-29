@@ -2158,3 +2158,11 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
 .plate-modal, .modal { overscroll-behavior: contain; }
 @media (prefers-reduced-motion: reduce) { button { transition: none; } }
 .comparison-value .relative-reference { display: block; font-size: 11px; font-weight: 500; line-height: 1.5; color: var(--text-soft, #53655a); white-space: normal; }
+/* CI labels/units must never squeeze measurement digits into narrow fragments. */
+.inspector-stats > .inspector-ci { flex-direction: column; align-items: flex-start; gap: 3px; }
+.inspector-ci > span { font-size: 11px; }
+.inspector-ci > span small { display: block; font-size: 10px; }
+.inspector-ci .inspector-ci-bounds { display: flex; flex-wrap: wrap; gap: 4px; text-align: left; max-width: 100%; font-size: 11px; overflow-wrap: normal; }
+.inspector-ci-bounds .inspector-ci-bound { white-space: nowrap; color: var(--text); font-variant-numeric: tabular-nums; }
+.batch-action-footer { flex: none; border-top: 1px solid var(--border, #dce2de); padding: 8px 0; background: var(--surface, #fff); }
+.batch-action-footer .assign-button { min-height: 34px; font-size: 11px; }

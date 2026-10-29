@@ -48,7 +48,7 @@ export default function ResultsPanel({
         <p role="status">{normalizationPending ? "正在更新参比归一 · 拟合参数保持不变" : supportsReferenceEdit ? "修改参比立即归一，不重新拟合" : "旧版快照缺少原始协方差；需重新分析后才能修改参比"}</p>
       </div>}
       <div className="result-context" aria-label="分析概况">
-        <span>{rows.length} 组曲线 · {state.options.fit_mode === "shared" ? "共享 A / D 全局 4PL" : "独立 4PL 拟合"}</span>
+        <span>{rows.length} 组曲线 · {state.options.fit_mode === "shared" ? "共享 A / D 全局 4PL" : "独立 4PL 拟合"} · {dimensionless ? "无量纲剂量" : stockRelative ? "按声明的原液信息归一" : `EC50 单位：${rows[0]?.EC50_unit || "未提供"}`}</span>
         <span className={warnings ? "result-quality-warning" : ""}>{warnings ? `${warnings} 个条目需检查` : "未触发自动警告；仍需实验验证"}</span>
       </div>
       {state.result?.export_error && (
@@ -75,6 +75,7 @@ export default function ResultsPanel({
             const usable = row.Status === "Success" && typeof value === "number" && Number.isFinite(value) && value > 0;
             const low = dimensionless ? row.Normalized_midpoint_X_CI_low : stockRelative ? row.Relative_stock_potency_X_CI_low : row.EC50_CI_low;
             const high = dimensionless ? row.Normalized_midpoint_X_CI_high : stockRelative ? row.Relative_stock_potency_X_CI_high : row.EC50_CI_high;
+            const ciUsable = showRelativeX ? usable : row.Status === "Success";
             const hasCI = typeof low === "number" && Number.isFinite(low) && typeof high === "number" && Number.isFinite(high);
             // Only routine replication/dose-basis notices collapse. Scientific qualification stays expanded.
             const warningParts = (row.warning_list?.length ? row.warning_list : [row.Warning]).flatMap(warning => warning.split(";"));
@@ -82,7 +83,7 @@ export default function ResultsPanel({
             return <tr key={row.Group} className={selected === row.Group ? "selected-row" : ""}>
               <td className="name-cell"><button className="result-group-button" onClick={() => onSelect(row.Group)} aria-pressed={selected === row.Group}>{row.Group}</button>{row.Group === state.options.reference_group && <span className="mini-tag">参比</span>}</td>
               <td className="comparison-value">{normalizationPending ? <span className="comparison-unavailable">更新中…</span> : usable ? <>{fmt(value)}{showRelativeX && <small> X</small>}{showRelativeX && relativeToReference !== null && Number.isFinite(relativeToReference) && <span className="relative-reference">{stockRelative ? "原液相对值" : "中点比值"} {fmt(relativeToReference)} 倍于参比</span>}</> : <span className="comparison-unavailable">—<small>不可比较</small></span>}</td>
-              <td className="comparison-ci">{!showRelativeX && <span>{fmt(row.EC50)} {row.EC50_unit}<br /></span>}{normalizationPending ? "更新中…" : usable && hasCI ? `${fmt(low)} – ${fmt(high)}` : "不提供区间"}</td>
+              <td className="comparison-ci">{!showRelativeX && <span>{fmt(row.EC50)} {row.EC50_unit}<br /></span>}{normalizationPending ? "更新中…" : ciUsable && hasCI ? `${fmt(low)} – ${fmt(high)}` : "不提供区间"}</td>
               <td>{row.Status !== "Success" ? <div className="comparison-warning"><strong>拟合失败 · 不提供倍数</strong><p>{row.Warning || row.Status}</p></div> : row.Warning ? <details className="comparison-warning" open={!usable || criticalWarning}><summary>{!usable ? "比较不可用 · 查看原因" : criticalWarning ? "比较条件警告 · 请审阅" : "需检查 · 查看警告"}</summary><p>{row.Warning}</p></details> : <span>{usable ? "拟合成功" : "比较不可用"}<small>{usable ? "仍需核对曲线与实验设计" : "请查看拟合详情及适用条件"}</small></span>}</td>
             </tr>;
           })}</tbody>
@@ -251,11 +252,9 @@ export function ResultInspector({ row }: { row: SummaryRow }) {
           <span>Log10 EC50</span>
           <b>{fmt(row.LogEC50)}</b>
         </div>
-        <div>
-          <span>EC50 95% CI {row.EC50_unit}</span>
-          <b>
-            {fmt(row.EC50_CI_low)} – {fmt(row.EC50_CI_high)}
-          </b>
+        <div className="inspector-ci">
+          <span>EC50 95% CI<small>{row.EC50_unit}</small></span>
+          <b className="inspector-ci-bounds"><span className="inspector-ci-bound">{fmt(row.EC50_CI_low)}</span><span>–</span><span className="inspector-ci-bound">{fmt(row.EC50_CI_high)}</span></b>
         </div>
         <div>
           <span>斜率 B</span>

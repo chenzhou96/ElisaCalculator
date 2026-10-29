@@ -24,8 +24,8 @@ test('primary summary pairs normalized X with direct reference midpoint ratio an
  assert.equal(document.querySelector('.metric-grid'),null)
 })
 test('absolute-dose mode never manufactures stock X and labels EC50 CI units',()=>{
- const table=show([{...row,Normalized_midpoint_X:null,Normalized_midpoint_X_CI_low:null,Normalized_midpoint_X_CI_high:null,EC50_CI_low:.2,EC50_CI_high:.3,EC50_unit:'ng/mL'}],{dose_basis:'stock_fraction',input_mode:'raw_concentration'})
- assert.match(table.textContent,/本组 \/ 参比/);assert.doesNotMatch(table.textContent,/40 X|参比归一 X|倍于参比/);assert.match(table.textContent,/.25 ng\/mL/);assert.match(table.textContent,/0.2 – 0.3/)
+ const table=show([{...row,EC50_ratio:null,Normalized_midpoint_X:null,Normalized_midpoint_X_CI_low:null,Normalized_midpoint_X_CI_high:null,EC50_CI_low:.2,EC50_CI_high:.3,EC50_unit:'ng/mL'}],{dose_basis:'stock_fraction',input_mode:'raw_concentration'})
+ assert.match(table.textContent,/本组 \/ 参比/);assert.doesNotMatch(table.textContent,/40 X|参比归一 X|倍于参比/);assert.match(table.textContent,/.25 ng\/mL/);assert.match(table.textContent,/0.2 – 0.3/);assert.match(table.textContent,/不可比较/,'Unavailable reference comparison must not suppress the independently valid EC50 CI')
 })
 test('eligible historical stock fractions retain their scientific X and stock CI at the top',()=>{
  const table=show([{...row,Normalized_midpoint_X:null,Relative_stock_potency_X:40,Relative_stock_potency_X_CI_low:35,Relative_stock_potency_X_CI_high:45}],{dose_basis:'stock_fraction',input_mode:'dilution_step'})
