@@ -179,7 +179,7 @@ export type RestoredRecord = Pick<Workspace,
 export function serializeRecord(state: Workspace, savedAt = new Date().toISOString()): string {
   const record = {
     schema: RECORD_SCHEMA,
-    app_version: '0.3.0',
+    app_version: '0.3.1',
     saved_at: savedAt,
     inputs: {
       inputView: state.inputView, plate: state.plate, rawText: state.rawText, source: state.source,

@@ -119,7 +119,7 @@ GitHub artifact upload adds archive wrapping; verify the checksum of the
 **extracted setup executable**. For example, in PowerShell:
 
 ```powershell
-Get-FileHash .\ElisaCalculator_0.3.0_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\ElisaCalculator_0.3.1_x64-setup.exe -Algorithm SHA256
 ```
 
 Use the actual filename in the artifact. The metadata SHA must match the branch
@@ -156,7 +156,60 @@ CI retains sandbox-supported Chrome at `/opt/google/chrome/chrome`.
 
 ## Native acceptance record
 
-Status at preparation of this change:
+### 0.3.1 DPI/work-area correction
+
+The 0.3.0 installer from commit `def459d90f218d89a5cfc984267159c2812355b0`
+passed hosted Windows installer/engine/launch CI and an actual Windows 11
+installation, installed binary hash checks, frozen-engine calculation, unchanged
+fit/plot reference normalization (10X/40X to 1.75X/7X), and six exports. Native
+1440×900 pixels were checked. At 150% display scaling the old 600-logical-pixel
+minimum height forced 900 physical pixels, so a requested 1366×768 physical
+window could not fit. Native Windows 11 editor/history/reference acceptance for
+that 0.3.0 binary was subsequently completed before PR #1 merged into `main`
+at `923c3da65d7839f4ffc12e97ce8092faf3c37d25`. This does not validate 0.3.1 sizing.
+
+Version 0.3.1 creates a visible, centered window with native overflow prevention
+and a small initial workspace. After configured-window creation and setup have
+completed, the main-thread `RunEvent::Ready` callback fits the current monitor's
+physical work area, reserves the measured native frame and eight physical pixels
+at each edge, and sets a bounded 800×420 logical minimum. Roomy monitors retain
+the preferred 1360×900 logical workspace. If monitor/sizing queries fail, startup
+attempts maximization; the hosted smoke gate requires a successful fit as well as
+a visible, responsive, correctly titled window within its monitor's work area,
+so this fallback cannot silently count as validated sizing. Sixteen pure Rust cases cover
+100%/150%/200%, fractional scales, taskbar and secondary-monitor offsets, frames,
+and small/invalid areas. The short-height CSS retains all 96 wells and readable OD
+text, uses an accessible icon rail, and scrolls the right editor internally.
+Scientific calculations, native history paths, and record schema are unchanged.
+
+The smoke harness awaits a newline-complete Ready sizing record within the
+existing launch timeout, then checks a full five seconds of window stability.
+It rejects missing, malformed, non-Boolean, array-root and duplicate results;
+`fit_ok:false` and either outer/client work-area overflow still fail the gate.
+Startup UTC/elapsed timing and any fit error are preserved in the bounds report.
+The completion parser is regression-tested in Windows CI before packaging.
+See [the October 7 maintenance record](MAINTENANCE_2026-10-07.md) for the prior
+failed-run evidence and the limits of the diagnosis.
+
+The native bounds probe accounts for the documented
+[GetWindowRect DPI virtualization](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowrect)
+by temporarily setting only its measuring thread's
+[DPI awareness context](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setthreaddpiawarenesscontext),
+then restoring it in `finally`. It does not alter monitor scaling, application
+preferences, or global OS settings. The probe's newest APIs require Windows 10
+1607, below the Windows 10 22H2 compatibility target.
+
+Hosted browser regressions exercise 150% scaling at short logical viewport
+sizes, verify actual OD screenshot pixels and all well bounds, and check editor,
+navigation, calculation, plot, and history layouts. Browser PNG/geometry evidence
+is retained as a commit-specific CI artifact. The new installer needs its own
+native startup/window and compact-interaction retest; the 0.3.0 native result
+does not validate the 0.3.1 binary. Keep a scoped backup of existing history before
+an update, install to the already verified destination, verify exact hashes and
+version, then check startup against the current taskbar-excluded monitor work
+area at the existing DPI without changing OS display settings.
+
+Status of the new 0.3.1 build at preparation of this change:
 
 - Hosted Windows Server 2022 installer/engine/launch job: **pending execution on
   the pushed commit**; the workflow and checks are implemented, not a completed

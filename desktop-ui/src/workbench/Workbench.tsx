@@ -66,6 +66,7 @@ export default function Workbench() {
   const menuRef = useRef<HTMLDivElement>(null);
   const recordRef = useRef<HTMLInputElement>(null);
   const requestRef = useRef(0);
+  const normalizationRequestRef = useRef(0);
   const lockRef = useRef(false);
   const native = isTauri();
   const [problemState, setProblem] = useState<(InputProblem & {version: number}) | null>(null);
@@ -133,12 +134,18 @@ export default function Workbench() {
   useEffect(() => {
     if (!normalizationPending || !state.result?.ok) return;
     const version = state.version;
+    const request = ++normalizationRequestRef.current;
+    const referenceGroup = state.options.reference_group;
+    const referenceValue = state.options.reference_assigned_value;
     let cancelled = false;
-    callBridge<RunResponse>({command: "renormalize", run_response: state.result, reference_group: state.options.reference_group, reference_assigned_value: state.options.reference_assigned_value}).then(response => {
-      if (cancelled || latest.current.version !== version) return;
+    const current = () => !cancelled && normalizationRequestRef.current === request && latest.current.version === version && latest.current.options.reference_group === referenceGroup && Object.is(latest.current.options.reference_assigned_value, referenceValue);
+    callBridge<RunResponse>({command: "renormalize", run_response: state.result, reference_group: referenceGroup, reference_assigned_value: referenceValue}).then(response => {
+      if (!current()) return;
       if (!response.ok) throw new Error(response.error ?? "参比更新失败");
+      const normalizedOptions = response.report?.options;
+      if (normalizedOptions?.reference_group !== referenceGroup || !Object.is(normalizedOptions?.reference_assigned_value, referenceValue)) throw new Error("参比响应与当前请求不匹配");
       dispatch({type: "renormalized", version, response});
-    }).catch(error => {if (!cancelled && latest.current.version === version) dispatch({type: "reference-failed", version, error: `参比归一失败：${String(error)}。已有拟合和归一已保留。`});});
+    }).catch(error => {if (current()) dispatch({type: "reference-failed", version, error: `参比归一失败：${String(error)}。已有拟合和归一已保留。`});});
     return () => {cancelled = true;};
   }, [normalizationPending, state.version, state.options.reference_group, state.options.reference_assigned_value, state.result, dispatch]);
   async function openHistory() {
@@ -298,6 +305,8 @@ export default function Workbench() {
     }
   }
   function saveRecord() {
+    // A portable record must never pair a new reference input with old results.
+    if (normalizationPending) return;
     try {
       const blob = new Blob([serializeRecord(state)], {
         type: "application/json",
@@ -382,7 +391,8 @@ export default function Workbench() {
                   <button
                     role="menuitem"
                     onClick={saveRecord}
-                    disabled={!hasInputs}
+                    title={normalizationPending ? "参比更新中，请等待完成后保存记录" : "下载包含原始输入、配置与结果的 JSON"}
+                    disabled={!hasInputs || normalizationPending}
                   >
                     保存分析记录…
                   </button>
@@ -455,7 +465,7 @@ export default function Workbench() {
           <Icon name={theme === "dark" ? "sun" : "moon"} size={15} />
           {theme === "dark" ? "日间" : "夜间"}
         </button>
-        <span className="version-tag">v0.3.0</span>
+        <span className="version-tag">v0.3.1</span>
         {native && (
           <div className="window-buttons">
             <button
@@ -496,6 +506,8 @@ export default function Workbench() {
               {pages.map((page, index) => (
                 <button
                   key={page}
+                  aria-label={pageNames[page]}
+                  title={pageNames[page]}
                   className={state.page === page ? "selected" : ""}
                   onClick={() => dispatch({ type: "page", page })}
                 >
@@ -511,6 +523,8 @@ export default function Workbench() {
             </nav>
             <div className="nav-bottom">
               <button
+                aria-label="使用说明"
+                title="使用说明"
                 className={state.page === "guide" ? "selected" : ""}
                 onClick={() => dispatch({ type: "page", page: "guide" })}
               >
@@ -524,7 +538,7 @@ export default function Workbench() {
             </div>
           </aside>
         )}
-        <main className="main-workspace">
+        <main className={`main-workspace ${state.page === "results" ? "results-workspace" : ""}`}>
           <div className="page-heading">
             <div>
               {!sidebar && (
@@ -536,16 +550,15 @@ export default function Workbench() {
                   <Icon name="menu" />
                 </button>
               )}
-              <span className="eyebrow">96-WELL COMPARATIVE ANALYSIS</span>
               <div className="data-heading-title"><h1>{pageNames[state.page]}</h1></div>
               <p>{pageSubtitles[state.page]}</p>
             </div>
             <div className="page-actions">
               <button onClick={() => void openHistory()} disabled={!!state.busy}>分析历史</button>
               <button
-                title="下载包含原始输入、配置与结果的 JSON"
+                title={normalizationPending ? "参比更新中，请等待完成后保存记录" : "下载包含原始输入、配置与结果的 JSON"}
                 onClick={saveRecord}
-                disabled={!hasInputs}
+                disabled={!hasInputs || normalizationPending}
               >
                 <Icon name="download" />
                 保存记录

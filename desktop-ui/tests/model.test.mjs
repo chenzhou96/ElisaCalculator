@@ -246,6 +246,31 @@ test('failed reference changes keep original fitted response and restore truthfu
   assert.equal(reducer({...pending,version:7},{type:'reference-failed',version:6,error:'late'}).version,7);
 });
 
+test('repeated evaluated reference values do not invalidate the request already in flight', () => {
+  const response={...result,report:{...result.report,options:{...defaultOptions,reference_group:'Reference',reference_assigned_value:10}}};
+  const before=state({result:response,version:5,options:{...defaultOptions,reference_group:'Reference',reference_assigned_value:10}});
+  const pending=reducer(before,{type:'options',patch:{reference_group:'Sample',reference_assigned_value:7}});
+  const committed=reducer(pending,{type:'options',patch:{reference_assigned_value:7}});
+  assert.equal(committed,pending,'formula blur must preserve the active request version and result');
+  assert.equal(reducer(committed,{type:'options',patch:{reference_group:'Sample',reference_assigned_value:7}}),pending);
+  const normalized={...response,report:{...response.report,options:{...response.report.options,reference_group:'Sample',reference_assigned_value:7}}};
+  assert.equal(reducer(committed,{type:'renormalized',version:pending.version,response:normalized}).result,normalized);
+  const invalid=reducer(pending,{type:'options',patch:{reference_assigned_value:NaN}});
+  assert.equal(reducer(invalid,{type:'options',patch:{reference_assigned_value:NaN}}),invalid,'NaN edits must also compare without restarting the same request');
+});
+
+test('older reference success and failure cannot replace the latest reference choice', () => {
+  const response={...result,report:{...result.report,options:{...defaultOptions,reference_group:'Reference',reference_assigned_value:10}}};
+  const before=state({result:response,version:5,options:{...response.report.options}});
+  const first=reducer(before,{type:'options',patch:{reference_group:'Sample'}});
+  const latest=reducer(first,{type:'options',patch:{reference_assigned_value:7}});
+  const normalized={...response,report:{...response.report,options:{...latest.options}}};
+  for(const candidate of [latest,reducer(latest,{type:'renormalized',version:latest.version,response:normalized})]) {
+    assert.equal(reducer(candidate,{type:'renormalized',version:first.version,response}),candidate);
+    assert.equal(reducer(candidate,{type:'reference-failed',version:first.version,error:'old failure'}),candidate);
+  }
+});
+
 test('complete snapshot restore retains historical result without fabricating a computation', () => {
   const before=state({request:18,version:6,result});
   const workspace={...state(),result,resultOrigin:'historical',recordSavedAt:'2026-10-03T09:00:00Z',compatibilityMessage:'',parsed};

@@ -107,5 +107,9 @@ def dose_to_step(log_dose, coordinate):
 def safe_power10(value):
     if not np.isfinite(value) or value > math.log10(np.finfo(float).max) or value < -323:
         return np.nan
-    result = float(10.0 ** value)
+    try:
+        # log10(max_float) is rounded; its inverse can still overflow at equality.
+        result = float(10.0 ** value)
+    except OverflowError:
+        return np.nan
     return result if np.isfinite(result) and result > 0 else np.nan

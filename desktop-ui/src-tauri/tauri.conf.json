@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "ElisaCalculator",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "identifier": "com.zhouc.elisacalculator",
   "build": {
     "frontendDist": "../dist",
@@ -13,13 +13,16 @@
     "windows": [
       {
         "title": "ELISA Calculator",
-        "width": 1360,
-        "height": 900,
+        "width": 800,
+        "height": 420,
+        "visible": true,
+        "center": true,
+        "preventOverflow": true,
         "resizable": true,
         "fullscreen": false,
         "decorations": false,
-        "minWidth": 900,
-        "minHeight": 600
+        "minWidth": 800,
+        "minHeight": 420
       }
     ],
     "security": {

@@ -1,4 +1,4 @@
-"""Subprocess contract tests for source entry or the installed Windows frozen engine."""
+"""Subprocess contract tests for source entry or an installed Windows/macOS frozen engine."""
 import base64
 import json
 import math
@@ -31,9 +31,16 @@ class PackagedBridgeContractTests(unittest.TestCase):
             LOCALAPPDATA=str(Path(cls.workspace.name) / 'local-app-data'),
         )
         if cls.frozen:
-            if sys.platform != 'win32':
-                raise unittest.SkipTest('The selected installer bridge is a Windows executable')
-            cls.environment['PATH'] = str(Path(os.environ['SystemRoot']) / 'System32')
+            if sys.platform == 'win32':
+                cls.environment['PATH'] = str(Path(os.environ['SystemRoot']) / 'System32')
+            elif sys.platform == 'darwin':
+                # No Python, package manager or checkout is available through PATH.
+                empty_path = Path(cls.workspace.name) / 'empty-path'
+                empty_path.mkdir()
+                cls.environment['PATH'] = str(empty_path)
+                cls.environment['HOME'] = cls.workspace.name
+            else:
+                raise unittest.SkipTest('Frozen release contracts target Windows and macOS')
 
     @classmethod
     def tearDownClass(cls):

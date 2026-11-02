@@ -3,6 +3,7 @@ from contextlib import ExitStack
 from copy import deepcopy
 import json
 import math
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -99,6 +100,28 @@ class ReferenceRenormalizationTests(unittest.TestCase):
         self.assertEqual(updated['report']['options']['reference_group'], 'sample')
         self.assertEqual(updated['report']['comparison']['reference_assigned_value'], 7)
         self.assert_fit_unchanged(before, updated)
+        self.assertEqual(before, self.original, 'caller input must not be mutated')
+
+    def test_finite_extreme_assignment_does_not_crash_run_or_reference_edit(self):
+        before = deepcopy(self.original)
+        for mode, result in (
+            ('initial run', self.run_pair(options={'reference_assigned_value': sys.float_info.max})),
+            ('reference edit', self.edit(before, group='reference', value=sys.float_info.max)),
+        ):
+            with self.subTest(mode=mode):
+                self.assertTrue(result['ok'])
+                self.assertTrue(result['report']['fit_success'])
+                self.assertEqual(result['report']['options']['reference_assigned_value'], sys.float_info.max)
+                self.assertEqual(result['results'], result['report']['summary_rows'])
+                # Out-of-range linear conversions stay unavailable, never zero or infinity.
+                self.assertIsNone(result['results'][0]['Relative_stock_potency_X'])
+                self.assertIsNone(result['results'][1]['Relative_stock_potency_X'])
+                if mode == 'reference edit':
+                    self.assert_fit_unchanged(before, result)
+                else:
+                    # Fresh-run metadata correctly records its different input options.
+                    self.assertEqual(result['report']['global_params'],
+                                     before['report']['global_params'])
         self.assertEqual(before, self.original, 'caller input must not be mutated')
 
     def test_displayed_or_previously_normalized_x_is_never_used(self):

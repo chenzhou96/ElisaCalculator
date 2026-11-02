@@ -1,0 +1,6 @@
+# Native Apple Silicon CPython 3.12 stack, matching the Windows numerical versions.
+-r ../../requirements-build.txt
+numpy==2.3.5
+pandas==2.2.3
+scipy==1.17.0
+matplotlib==3.10.8

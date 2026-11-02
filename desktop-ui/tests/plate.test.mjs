@@ -178,3 +178,23 @@ test('mixed explicit replacement rebases selected wells while legacy wells remai
  assert.equal(od(converted,'B1').dose,64);assert.equal(od(converted,'B1').raw,od(old,'B1').raw)
  assert.equal(legacyPlateWells(converted).length,legacyPlateWells(old).length-1)
 })
+
+test('column batch is a pure atomic layout; preserves raw/other wells and restarts every replicate',async()=>{
+ const {previewColumnBatch}=await import('../src/workbench/plateBatch.ts')
+ const original=applyPaste(createPlate(),previewPaste('0\t\n.5\t.6'),false,false)
+ const draft={names:'Reference\nSample_A\nSample_B',firstColumn:1,replicateColumns:2,firstRow:0,lastRow:6,start:128,factor:2,direction:'decreasing'}
+ const before=JSON.stringify(original), preview=previewColumnBatch(original,draft)
+ assert.equal(JSON.stringify(original),before)
+ assert.equal(preview.ids.length,42);assert.equal(preview.groups.length,3)
+ for(const col of [1,2,3,4,5,6]){assert.equal(od(preview.plate,'A'+col).dose,128);assert.equal(od(preview.plate,'G'+col).dose,2);assert.equal(od(preview.plate,'H'+col).kind,'unassigned')}
+ assert.equal(od(preview.plate,'A1').raw,'0');assert.equal(od(preview.plate,'A2').raw,'');assert.equal(od(preview.plate,'B2').raw,'.6')
+ assert.deepEqual(od(preview.plate,'A7'),od(original,'A7'))
+ let state={...structuredClone(initialWorkspace),plate:original};state=reducer(state,{type:'plate',plate:preview.plate});assert.equal(state.platePast.length,1)
+ state=reducer(state,{type:'plate-undo'});assert.deepEqual(state.plate,original)
+ state=reducer(state,{type:'plate-redo'});assert.deepEqual(state.plate,preview.plate)
+ const increasing=previewColumnBatch(original,{...draft,firstRow:2,lastRow:7,start:.001,direction:'increasing'})
+ assert.equal(od(increasing.plate,'C1').dose,.001);assert.equal(od(increasing.plate,'H2').dose,.032)
+ for(const patch of [{names:''},{names:'R\nR'},{names:'R\tS'},{firstColumn:9},{replicateColumns:0},{lastRow:8},{firstRow:7,lastRow:0},{start:0},{factor:1}])assert.throws(()=>previewColumnBatch(original,{...draft,...patch}))
+ const collision=assignWells(original,['A12'],{...assignment,group:'Reference'})
+ assert.throws(()=>previewColumnBatch(collision,draft),/区域外已有同名/)
+})
