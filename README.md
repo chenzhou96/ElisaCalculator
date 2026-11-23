@@ -102,9 +102,9 @@ npm run tauri build -- --bundles nsis
 
 如果网络受限，Tauri 可能在首次打包时下载 NSIS/WiX 失败（超时）。这是安装包工具链下载失败，不影响 `app.exe` 构建。
 
-### 3) Python 运行依赖
+### 3) Windows 独立安装包运行依赖
 
-当前桌面版通过 Python 桥接运行计算逻辑，目标机器需要可用的 Python 环境及依赖（如 numpy/pandas/scipy/matplotlib）。
+本分支的 Windows x64 安装包包含 Python 计算桥接、数值库、私有 Visual C++ 运行库及 WebView2 离线安装程序。安装版不会查找系统 Python。开发、CLI 或自行构建仍需要各自的开发依赖。详见 [旧版独立安装包、下载与验证](docs/WINDOWS_STANDALONE_98D6B40.md)。
 
 建议直接使用仓库内依赖清单：
 
