@@ -1,19 +1,25 @@
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::Value;
+#[cfg(all(windows, not(debug_assertions)))]
+use tauri::Manager;
 use std::{
   env,
-  ffi::OsString,
-  io::{ErrorKind, Read, Write},
-  path::{Path, PathBuf},
+  io::{Read, Write},
+  path::Path,
   process::{Command, Stdio},
 };
+
+#[cfg(any(not(windows), debug_assertions))]
+use std::{ffi::OsString, io::ErrorKind, path::PathBuf};
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
 /// CREATE_NO_WINDOW — 防止子进程弹出命令行窗口
+#[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+#[cfg(any(not(windows), debug_assertions))]
 fn source_project_root() -> Option<PathBuf> {
   if let Ok(value) = env::var("ELISA_PROJECT_ROOT") {
     let candidate = PathBuf::from(value);
@@ -50,6 +56,7 @@ fn source_project_root() -> Option<PathBuf> {
   None
 }
 
+#[cfg(any(not(windows), debug_assertions))]
 fn bundled_bridge_base_dirs() -> Vec<PathBuf> {
   let mut candidates = Vec::new();
 
@@ -73,6 +80,13 @@ fn bundled_bridge_base_dirs() -> Vec<PathBuf> {
 }
 
 fn parse_bridge_output(output: std::process::Output, command_name: &str) -> Result<Value, String> {
+  if !output.status.success() {
+    return Err(format!(
+      "{command_name} 退出失败 ({}): {}",
+      output.status,
+      String::from_utf8_lossy(&output.stderr)
+    ));
+  }
   let stdout = String::from_utf8(output.stdout)
     .map_err(|err| format!("{command_name} 输出不是有效 UTF-8: {err}"))?;
   log::info!("[Rust bridge] stdout 长度: {} bytes", stdout.len());
@@ -84,11 +98,12 @@ fn parse_bridge_output(output: std::process::Output, command_name: &str) -> Resu
 
   serde_json::from_str::<Value>(&stdout)
     .map_err(|err| {
-      log::error!("[Rust bridge] JSON 解析失败: {}\nstdout 前 500 字符: {}", err, &stdout[..stdout.len().min(500)]);
-      format!("{command_name} 返回了无效 JSON: {err}\n{stdout}")
+      log::error!("[Rust bridge] JSON 解析失败: {}", err);
+      format!("{command_name} 返回了无效 JSON: {err}")
     })
 }
 
+#[cfg(any(not(windows), debug_assertions))]
 fn run_bridge_once(
   executable: &str,
   extra_args: &[&str],
@@ -128,6 +143,7 @@ fn run_bridge_once(
   parse_bridge_output(output, executable)
 }
 
+#[cfg(any(not(windows), debug_assertions))]
 fn unique_paths(items: Vec<PathBuf>) -> Vec<PathBuf> {
   let mut seen = std::collections::HashSet::<OsString>::new();
   let mut result = Vec::new();
@@ -140,6 +156,7 @@ fn unique_paths(items: Vec<PathBuf>) -> Vec<PathBuf> {
   result
 }
 
+#[cfg(any(not(windows), debug_assertions))]
 fn bundled_bridge_candidates() -> Vec<PathBuf> {
   let exe_name = if cfg!(windows) {
     "elisa_bridge.exe"
@@ -166,6 +183,11 @@ fn run_bridge_executable(executable: &Path, request_json: &str) -> Result<Value,
   );
   let mut cmd = Command::new(executable);
   cmd.current_dir(work_dir)
+    .env_remove("PYTHONHOME")
+    .env_remove("PYTHONPATH")
+    .env_remove("PYTHONSTARTUP")
+    .env_remove("VIRTUAL_ENV")
+    .env_remove("CONDA_PREFIX")
     .env("PYTHONIOENCODING", "utf-8")
     .env("PYTHONUTF8", "1")
     .stdin(Stdio::piped())
@@ -185,19 +207,23 @@ fn run_bridge_executable(executable: &Path, request_json: &str) -> Result<Value,
       )
     })?;
 
-  if let Some(stdin) = child.stdin.as_mut() {
-    stdin
-      .write_all(request_json.as_bytes())
-      .map_err(|err| format!("写入内置桥接请求失败: {err}"))?;
-  }
-
+  // Drain both output pipes while writing input so startup diagnostics cannot
+  // block a large JSON request on the Windows pipe buffer.
+  let mut stdin = child.stdin.take().ok_or("无法打开内置桥接输入管道")?;
+  let request_bytes = request_json.as_bytes().to_owned();
+  let writer = std::thread::spawn(move || stdin.write_all(&request_bytes));
   let output = child
     .wait_with_output()
-    .map_err(|err| format!("等待内置桥接返回失败: {err}"))?;
-
+    .map_err(|err| format!("等待内置桥接返回失败: {err}"));
+  let written = writer.join().map_err(|_| "内置桥接输入线程异常结束")?;
+  let output = output?;
+  if output.status.success() {
+    written.map_err(|err| format!("写入内置桥接请求失败: {err}"))?;
+  }
   parse_bridge_output(output, &format!("内置桥接 {}", executable.display()))
 }
 
+#[cfg(any(not(windows), debug_assertions))]
 fn run_python_bridge(request: Value) -> Result<Value, String> {
   let request_json =
     serde_json::to_string(&request).map_err(|err| format!("序列化请求失败: {err}"))?;
@@ -272,6 +298,33 @@ fn run_python_bridge(request: Value) -> Result<Value, String> {
   Err(format!("无法调用 Python 桥接层: {}", errors.join(" | ")))
 }
 
+#[cfg(all(windows, not(debug_assertions)))]
+fn run_installed_bridge(resource_dir: &Path, request: &Value) -> Result<Value, String> {
+  let dir = resource_dir.join("resources").join("bridge");
+  let executable = dir.join("elisa_bridge.exe");
+  for required in [&executable, &dir.join("_internal").join("python312.dll")] {
+    if !required.is_file() {
+      return Err(format!("内置计算组件缺失：{}。请使用完整安装包重新安装。", required.display()));
+    }
+  }
+
+  let json = serde_json::to_string(request).map_err(|err| format!("序列化请求失败: {err}"))?;
+  run_bridge_executable(&executable, &json)
+}
+
+#[cfg(all(windows, not(debug_assertions)))]
+pub fn run_bridge_smoke(input: &Path, output: &Path) -> Result<(), String> {
+  // In a Windows installed application Tauri's resource root is the main
+  // executable's directory. Use the same resolver and runner as Tauri IPC.
+  let executable = env::current_exe().map_err(|err| err.to_string())?;
+  let resource_dir = executable.parent().ok_or("Missing app executable directory")?;
+  let bytes = std::fs::read(input).map_err(|err| err.to_string())?;
+  let request = serde_json::from_slice(&bytes).map_err(|err| err.to_string())?;
+  let result = run_installed_bridge(resource_dir, &request)?;
+  let bytes = serde_json::to_vec(&result).map_err(|err| err.to_string())?;
+  std::fs::write(output, bytes).map_err(|err| err.to_string())
+}
+
 #[tauri::command]
 fn read_file_base64(path: String) -> Result<String, String> {
   let mut file = std::fs::File::open(&path)
@@ -288,11 +341,22 @@ fn read_file_base64(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn run_bridge(request: Value) -> Result<Value, String> {
+async fn run_bridge(app: tauri::AppHandle, request: Value) -> Result<Value, String> {
   log::info!("[Rust bridge] 收到前端请求: command={}", request.get("command").and_then(|c| c.as_str()).unwrap_or("?"));
-  let result = tauri::async_runtime::spawn_blocking(move || run_python_bridge(request))
-    .await
-    .map_err(|err| err.to_string())?;
+  #[cfg(all(windows, not(debug_assertions)))]
+  let result = {
+    let resource_dir = app.path().resource_dir().map_err(|err| err.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || run_installed_bridge(&resource_dir, &request))
+      .await
+      .map_err(|err| err.to_string())?
+  };
+  #[cfg(any(not(windows), debug_assertions))]
+  let result = {
+    let _ = app;
+    tauri::async_runtime::spawn_blocking(move || run_python_bridge(request))
+      .await
+      .map_err(|err| err.to_string())?
+  };
   match &result {
     Ok(value) => log::info!("[Rust bridge] 返回前端: ok={}", value.get("ok").and_then(|o| o.as_bool()).unwrap_or(false)),
     Err(e) => log::error!("[Rust bridge] 返回前端错误: {}", e),
